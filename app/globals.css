@@ -1,0 +1,43 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{ --bg:#0b0f14; --fg:#e6edf3; --card:#0f172a; --border:#1f2937; }
+body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui; }
+a{ color:#93c5fd; }
+.card{ @apply rounded-2xl shadow-lg p-6 bg-[color:var(--card)] border border-[color:var(--border)]; }
+.btn{ @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-700 hover:border-gray-500 transition bg-black/30; }
+.hint{ @apply text-sm text-gray-400; }
+.badge{ @apply inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-gray-700 bg-black/30; }
+.container-narrow{ @apply max-w-6xl mx-auto px-4; }
+
+
+/* --- animações suaves para mosaico --- */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+  100% { transform: translateY(0px); }
+}
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: #0b1220;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.tile:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 12px 40px rgba(99,102,241,.18); border-color: #3b82f6; }
+.tile img { width:100%; height:100%; object-fit: cover; display:block; }
+.tile .overlay {
+  position:absolute; inset:0; display:flex; align-items:end; padding:10px 12px;
+  background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
+  color:#dbeafe; font-size:.9rem; opacity:0; transition: opacity .25s ease;
+}
+.tile:hover .overlay { opacity:1; }
+.tile .shine {
+  content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,.08), rgba(255,255,255,0) 60%);
+  transform: rotate(25deg); opacity:.0; transition: opacity .3s ease;
+}
+.tile:hover .shine { opacity:.8; }

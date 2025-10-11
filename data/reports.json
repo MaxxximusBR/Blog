@@ -1,0 +1,65 @@
+[
+  {
+    "slug": "2025-03",
+    "title": "Março de 2025 — Análise Global e América do Sul",
+    "file": "/reports/marco-2025.pdf",
+    "summary": "Distribuição global (predomínio EUA) e 5 casos na América do Sul.",
+    "meta": {
+      "global": 304
+    }
+  },
+  {
+    "slug": "2025-04",
+    "title": "Abril de 2025 — Nota Detalhada e Pilotos",
+    "file": "/reports/abril-2025.pdf",
+    "summary": "324 globais; aumento de relatos por pilotos; foco no Atacama e SE do Brasil.",
+    "meta": {
+      "global": 324
+    }
+  },
+  {
+    "slug": "2025-05",
+    "title": "Maio de 2025 — Serra do Rio do Rastro (SC)",
+    "file": "/reports/maio-2025.pdf",
+    "summary": "385 globais; pico associado a vídeos de drone em SC; 18 no Brasil.",
+    "meta": {
+      "global": 385
+    }
+  },
+  {
+    "slug": "2025-06",
+    "title": "Junho de 2025 — Queda Global, Brasil em foco",
+    "file": "/reports/junho-2025.pdf",
+    "summary": "210 globais; 25 na América do Sul; 15 no Brasil (Torres/RS).",
+    "meta": {
+      "global": 210
+    }
+  },
+  {
+    "slug": "2025-07",
+    "title": "Julho de 2025 — Piracicaba & Barra do Garças",
+    "file": "/reports/julho-2025.pdf",
+    "summary": "330 globais; 12 no Brasil; casos em IR e impacto do World UFO Day.",
+    "meta": {
+      "global": 330
+    }
+  },
+  {
+    "slug": "2025-08",
+    "title": "Agosto de 2025 — Mínimo Anual e Casos Virais",
+    "file": "/reports/agosto-2025.pdf",
+    "summary": "95 globais; EUA 52; Brasil 8; caso 'Mach 10' e LaGuardia.",
+    "meta": {
+      "global": 95
+    }
+  },
+  {
+    "slug": "2025-09",
+    "title": "Setembro de 2025 — 'Drones Misteriosos'",
+    "file": "/reports/setembro-2025.pdf",
+    "summary": "306 globais; Europa 128; EUA 89; Brasil 14; Dinamarca em foco.",
+    "meta": {
+      "global": 306
+    }
+  }
+]

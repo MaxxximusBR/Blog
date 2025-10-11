@@ -1,0 +1,16 @@
+
+LOGIN PRONTO (sem .env)
+-----------------------
+Senha: ufo12345
+2FA (TOTP): JBSWY3DPEHPK3PXP
+
+Como usar o 2FA:
+1) Abra o Google Authenticator > "+" > "Inserir chave de configuração".
+2) Nome: "Anuário OVNIs 2025 (Admin)"; Chave: JBSWY3DPEHPK3PXP; Tipo: "Baseado em tempo".
+3) No login, use a senha acima + o código de 6 dígitos.
+
+Passo a passo:
+1) Descompacte este patch na RAIZ do projeto (mesmas pastas).
+2) Aceite substituir arquivos.
+3) npm run dev
+4) Acesse http://localhost:3000/login

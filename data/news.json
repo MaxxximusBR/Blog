@@ -1,0 +1,26 @@
+[
+  {
+    "id": "n1",
+    "date": "2025-07-02",
+    "title": "World UFO Day: picos de buscas e relatos",
+    "link": "https://www.youtube.com/@LuzesAbismo",
+    "image": "/images/MiniaturaLUZESABISMO.jpg",
+    "highlight": true
+  },
+  {
+    "id": "n2",
+    "date": "2025-09-12",
+    "title": "Europa registra ‘drones misteriosos’",
+    "link": "#",
+    "image": "/images/hero.jpg",
+    "highlight": true
+  },
+  {
+    "id": "n3",
+    "date": "2025-06-15",
+    "title": "Torres/RS: luz relatada por pescadores",
+    "link": "#",
+    "image": "/images/hero2.jpg",
+    "highlight": false
+  }
+]
