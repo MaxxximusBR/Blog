@@ -1,31 +1,30 @@
+// middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-function randomId(n=32){ return Array.from({length:n},()=>Math.random().toString(36).slice(2)).join('').slice(0,n); }
+function rid(n=32){ return Array.from({length:n},()=>Math.random().toString(36).slice(2)).join('').slice(0,n); }
 
-export function middleware(req: NextRequest) {
-  // injeta CSRF se faltar
-  const csrf = req.cookies.get('csrf')?.value;
-  if (!csrf) {
+export function middleware(req: NextRequest){
+  // Garante cookie de CSRF, mas não bloqueia nada
+  if (!req.cookies.get('csrf')?.value){
     const res = NextResponse.next();
-    res.cookies.set('csrf', randomId(32), { httpOnly:false, sameSite:'lax', secure: process.env.NODE_ENV==='production', path:'/' });
+    res.cookies.set('csrf', rid(32), { httpOnly:false, sameSite:'lax', secure: process.env.NODE_ENV==='production', path:'/' });
     return res;
   }
 
+  // Gate APENAS para /admin e /api/admin/*
   const p = req.nextUrl.pathname;
-const protectedPath =
-  p.startsWith('/admin') ||
-  (p.startsWith('/api/admin') && !p.startsWith('/api/admin/login') && !p.startsWith('/api/admin/logout'));
+  const needsAuth = p.startsWith('/admin') || (p.startsWith('/api/admin') && !p.startsWith('/api/admin/login') && !p.startsWith('/api/admin/logout'));
+  if (!needsAuth) return NextResponse.next();
 
-  if (!isProtected) return NextResponse.next();
-
-  const cookie = req.cookies.get('admin_auth')?.value;
-  if (cookie === '1') return NextResponse.next();
+  const ok = req.cookies.get('admin_auth')?.value === '1';
+  if (ok) return NextResponse.next();
 
   const url = req.nextUrl.clone();
   url.pathname = '/login';
-  url.searchParams.set('redirect', req.nextUrl.pathname);
+  url.searchParams.set('redirect', p);
   return NextResponse.redirect(url);
 }
 
-export const config = { matcher: ['/:path*'] };
+// 👇 middleware só roda onde realmente precisa
+export const config = { matcher: ['/admin/:path*', '/api/admin/:path*'] };
