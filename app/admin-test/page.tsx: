@@ -1,0 +1,25 @@
+'use client';
+import { useState } from 'react';
+
+export default function AdminTest() {
+  const [out, setOut] = useState('pronto');
+
+  async function ping() {
+    setOut('clicou… testando fetch e Blob…');
+    try {
+      const r = await fetch('/api/_diag/blob');
+      const j = await r.json();
+      setOut('diag: ' + JSON.stringify(j));
+    } catch (e:any) {
+      setOut('erro no fetch: ' + (e?.message || String(e)));
+    }
+  }
+
+  return (
+    <div style={{maxWidth:600,margin:'40px auto',padding:16}}>
+      <h1>Admin Test</h1>
+      <button type="button" onClick={ping} style={{padding:'10px 16px'}}>Testar clique + fetch</button>
+      <pre style={{whiteSpace:'pre-wrap',marginTop:16}}>{out}</pre>
+    </div>
+  );
+}
