@@ -1,9 +1,38 @@
-
+// app/api/reports/route.ts
 import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import path from 'path';
+import { list, put } from '@vercel/blob';
+
+const INDEX_PATH = 'indexes/reports.json';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
-  const file = path.join(process.cwd(), 'data', 'reports.json');
-  try { const buf = await readFile(file, 'utf-8'); return NextResponse.json(JSON.parse(buf)); }
-  catch { return NextResponse.json([], { status: 200 }); }
+  // tenta localizar o índice no Blob
+  const res = await list({ prefix: 'indexes/' });
+  // @ts-ignore
+  const item = res.blobs.find(b => b.pathname === INDEX_PATH || b.pathname.endsWith('/reports.json'));
+
+  if (!item) {
+    // cria um índice vazio na primeira execução
+    await put(INDEX_PATH, JSON.stringify([], null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
+      contentType: 'application/json',
+    });
+    return NextResponse.json([]);
+  }
+
+  // @ts-ignore
+  const url: string | undefined = item.url;
+  if (!url) return NextResponse.json([]);
+
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return NextResponse.json([]);
+    const json = await r.json();
+    return NextResponse.json(json);
+  } catch {
+    return NextResponse.json([]);
+  }
 }
