@@ -8,13 +8,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  // tenta localizar o índice no Blob
   const res = await list({ prefix: 'indexes/' });
   // @ts-ignore
   const item = res.blobs.find(b => b.pathname === INDEX_PATH || b.pathname.endsWith('/reports.json'));
 
   if (!item) {
-    // cria um índice vazio na primeira execução
     await put(INDEX_PATH, JSON.stringify([], null, 2), {
       access: 'public',
       addRandomSuffix: false,
