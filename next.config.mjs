@@ -1,30 +1,14 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  experimental: { appDir: true },
+// next.config.mjs
+export default {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        source: '/(.*)',
         headers: [
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'", // <- libera o JS do Admin e do fallback
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://*.vercel-storage.com",
-              "connect-src 'self' https://*.vercel-storage.com https://*.blob.vercel-storage.com",
-              "frame-src https://www.youtube.com https://youtube.com https://*.youtube-nocookie.com",
-              "font-src 'self' data:"
-            ].join("; ")
-          }
-        ]
-      }
+          // Ajuste o CSP conforme seu requisito; abaixo é liberal o suficiente para funcionar:
+          { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;" },
+        ],
+      },
     ];
-  }
+  },
 };
-module.exports = nextConfig;
