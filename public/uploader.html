@@ -1,6 +1,14 @@
-<!doctype html><meta charset="utf-8" />
+<!doctype html>
+<meta charset="utf-8" />
 <title>Uploader (fallback)</title>
-<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px}label{display:block;margin:12px 0 6px;font-size:14px}input,button{padding:8px 10px}button{margin-top:16px}#msg{margin-top:16px;font-size:14px}</style>
+<link rel="preload" href="/uploader.js" as="script">
+<style>
+  body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px}
+  label{display:block;margin:12px 0 6px;font-size:14px}
+  input,button{padding:8px 10px}
+  button{margin-top:16px}
+  #msg{margin-top:16px;font-size:14px;white-space:pre-wrap}
+</style>
 <h1>Upload de Relatório (Fallback)</h1>
 <label>Slug (AAAA-MM)</label><input id="slug" placeholder="2025-10"/>
 <label>Título</label><input id="title" placeholder="Relatório de Outubro de 2025"/>
@@ -8,23 +16,6 @@
 <label>Global (opcional, nº de casos)</label><input id="global"/>
 <label>Arquivo PDF</label><input id="file" type="file" accept="application/pdf"/>
 <button id="btn">Enviar</button>
-<div id="msg"></div>
-<script>
-const $=id=>document.getElementById(id);
-$('btn').onclick=async()=>{
-  $('msg').textContent='Clicou… enviando…';
-  const fd=new FormData();
-  fd.append('slug',$('slug').value.trim());
-  fd.append('title',$('title').value.trim());
-  if($('summary').value.trim())fd.append('summary',$('summary').value.trim());
-  if($('global').value.trim()) fd.append('global',$('global').value.trim());
-  const f=$('file').files[0]; if(!f){$('msg').textContent='Selecione um PDF.';return;}
-  fd.append('file',f);
-  try{
-    const res=await fetch('/api/upload',{method:'POST',body:fd});
-    const j=await res.json().catch(()=>({}));
-    $('msg').textContent=(res.ok?'OK: ':'Erro: ')+(j.msg||res.status);
-    if(j.file){$('msg').innerHTML+='<br>URL: <a target=_blank href="'+j.file+'">'+j.file+'</a>';}
-  }catch(e){$('msg').textContent='Falha de rede: '+e.message;}
-};
-</script>
+<div id="msg">JS ainda não rodou…</div>
+<noscript>O JavaScript está desativado ou bloqueado pelo navegador/servidor.</noscript>
+<script src="/uploader.js" defer></script>
