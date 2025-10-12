@@ -1,7 +1,5 @@
-// app/api/upload/route.ts
 import { NextResponse } from 'next/server';
 import { put, list } from '@vercel/blob';
-import { assertCsrfOK, getIp, rateLimit } from '@/lib/security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,18 +8,19 @@ type IndexItem = {
   slug: string;            // AAAA-MM
   title: string;
   summary?: string;
-  file: string;            // URL pública do PDF no Blob
+  file: string;            // URL pública no Blob
   meta?: { global?: number };
 };
 
 const INDEX_PATH = 'indexes/reports.json';
 
 function ensureBlobEnv() {
-  const token = process.env.BLOB_READ_WRITE_TOKEN || '';
-  if (!token) throw new Error('Config ausente: BLOB_READ_WRITE_TOKEN não definido no Vercel (Project → Storage → Blob → Create).');
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error('BLOB_READ_WRITE_TOKEN ausente no projeto Vercel (Storage → Blob → Create).');
+  }
 }
 
-async function resolveIndexURL(): Promise<string | null> {
+async function getIndexURL(): Promise<string | null> {
   const res = await list({ prefix: 'indexes/' });
   // @ts-ignore
   const item = res.blobs.find(b => b.pathname === INDEX_PATH || b.pathname.endsWith('/reports.json'));
@@ -29,66 +28,90 @@ async function resolveIndexURL(): Promise<string | null> {
   return item?.url ?? null;
 }
 
+function parseSlug(s: unknown) {
+  const v = String(s ?? '').trim();
+  if (!/^\d{4}-\d{2}$/.test(v)) throw new Error('Slug inválido (use AAAA-MM).');
+  return v;
+}
+
 export async function POST(req: Request) {
   try {
     ensureBlobEnv();
 
-    const ip = getIp(req);
-    if (!rateLimit('upload', ip, 8, 60_000)) {
-      return NextResponse.json({ ok:false, msg:'Muitas requisições, tente em instantes.' }, { status: 429 });
+    const contentType = req.headers.get('content-type') || '';
+    let slug = '';
+    let title = '';
+    let summary = '';
+    let global: number | undefined;
+    let bytes: Uint8Array | null = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData();
+      slug = parseSlug(form.get('slug'));
+      title = String(form.get('title') ?? '').trim();
+      summary = String(form.get('summary') ?? '').trim();
+      const g = Number(form.get('global') ?? 0);
+      global = isNaN(g) || g <= 0 ? undefined : g;
+
+      const file = form.get('file') as File | null;
+      if (!title || !file) throw new Error('Preencha título e selecione um PDF.');
+      if (file.type !== 'application/pdf') throw new Error('Apenas PDF.');
+      const ab = await file.arrayBuffer();
+      bytes = new Uint8Array(ab);
+    } else {
+      // JSON: { slug, title, summary?, global?, fileBase64: "data:application/pdf;base64,..." }
+      const body = await req.json().catch(() => ({} as any));
+      slug = parseSlug(body.slug);
+      title = String(body.title ?? '').trim();
+      summary = String(body.summary ?? '').trim();
+      const g = Number(body.global ?? 0);
+      global = isNaN(g) || g <= 0 ? undefined : g;
+      const fileBase64 = String(body.fileBase64 ?? '');
+      if (!title || !fileBase64) throw new Error('JSON inválido: informe title e fileBase64.');
+      const comma = fileBase64.indexOf(',');
+      const b64 = comma >= 0 ? fileBase64.slice(comma + 1) : fileBase64;
+      const bin = Buffer.from(b64, 'base64');
+      bytes = new Uint8Array(bin);
     }
-    if (!(await assertCsrfOK(req))) {
-      return NextResponse.json({ ok:false, msg:'CSRF inválido.' }, { status: 403 });
-    }
 
-    const form = await req.formData();
-    const slug = String(form.get('slug') ?? '').trim();           // AAAA-MM
-    const title = String(form.get('title') ?? '').trim();
-    const summary = String(form.get('summary') ?? '').trim();
-    const global = Number(form.get('global') ?? 0) || undefined;
-    const file = form.get('file') as File | null;
-
-    if (!/^\d{4}-\d{2}$/.test(slug)) return NextResponse.json({ ok:false, msg:'Slug inválido (use AAAA-MM).' }, { status: 400 });
-    if (!title || !file)          return NextResponse.json({ ok:false, msg:'Preencha título e selecione um PDF.' }, { status: 400 });
-    if (file.type !== 'application/pdf') return NextResponse.json({ ok:false, msg:'Apenas PDF.' }, { status: 415 });
-
-    // Em Serverless, payloads grandes podem ser bloqueados. Teste com <4MB primeiro.
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!bytes || bytes.byteLength === 0) throw new Error('Arquivo vazio.');
     if (bytes.byteLength > 4.5 * 1024 * 1024) {
-      return NextResponse.json({ ok:false, msg:'PDF acima de ~4.5MB. Posso ativar upload direto do navegador (cliente→Blob) para suportar arquivos maiores.' }, { status: 413 });
+      throw new Error('PDF acima de ~4.5MB nesta rota. Posso habilitar upload direto do navegador→Blob para arquivos maiores.');
     }
 
-    // 1) Envia o PDF ao Blob (público)
-    const pdfPath = `reports/${slug}-${Math.random().toString(36).slice(2,8)}.pdf`;
-    const uploaded = await put(pdfPath, bytes, {
+    // 1) Sobe PDF
+    const key = `reports/${slug}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+    const uploaded = await put(key, bytes, {
       access: 'public',
       addRandomSuffix: false,
-      contentType: 'application/pdf',
+      contentType: 'application/pdf'
     });
 
-    // 2) Lê índice atual (se houver)
+    // 2) Lê índice atual (se existir)
     let index: IndexItem[] = [];
-    const indexURL = await resolveIndexURL();
+    const indexURL = await getIndexURL();
     if (indexURL) {
-      const r = await fetch(indexURL, { cache: 'no-store' });
-      if (r.ok) index = await r.json();
+      try {
+        const r = await fetch(indexURL, { cache: 'no-store' });
+        if (r.ok) index = await r.json();
+      } catch {}
     }
 
-    // 3) Atualiza item do mês
+    // 3) Atualiza/adiciona item
     const entry: IndexItem = { slug, title, summary: summary || undefined, file: uploaded.url, meta: global ? { global } : undefined };
     const i = index.findIndex(x => x.slug === slug);
     if (i >= 0) index[i] = entry; else index.push(entry);
     index.sort((a, b) => a.slug.localeCompare(b.slug));
 
-    // 4) Salva o índice
+    // 4) Grava índice
     const saved = await put(INDEX_PATH, JSON.stringify(index, null, 2), {
       access: 'public',
       addRandomSuffix: false,
-      contentType: 'application/json',
+      contentType: 'application/json'
     });
 
-    return NextResponse.json({ ok:true, msg:'Upload concluído.', file: uploaded.url, indexURL: saved.url });
+    return NextResponse.json({ ok: true, msg: 'Upload concluído.', file: uploaded.url, indexURL: saved.url });
   } catch (e: any) {
-    return NextResponse.json({ ok:false, msg: e?.message || 'Falha no upload.' }, { status: 500 });
+    return NextResponse.json({ ok: false, msg: e?.message || 'Falha no upload.' }, { status: 400 });
   }
 }
