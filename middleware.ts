@@ -13,12 +13,9 @@ export function middleware(req: NextRequest) {
   }
 
   const p = req.nextUrl.pathname;
-  const isProtected =
+const protectedPath =
   p.startsWith('/admin') ||
-  p.startsWith('/api/upload') ||
-  (p.startsWith('/api/admin') &&
-    !p.startsWith('/api/admin/login') &&    // ← manter esta exceção
-    !p.startsWith('/api/admin/logout'));
+  (p.startsWith('/api/admin') && !p.startsWith('/api/admin/login') && !p.startsWith('/api/admin/logout'));
 
   if (!isProtected) return NextResponse.next();
 
