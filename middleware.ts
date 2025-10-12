@@ -5,14 +5,11 @@ import type { NextRequest } from 'next/server';
 function rid(n=32){ return Array.from({length:n},()=>Math.random().toString(36).slice(2)).join('').slice(0,n); }
 
 export function middleware(req: NextRequest){
-  // Garante cookie de CSRF, mas não bloqueia nada
   if (!req.cookies.get('csrf')?.value){
     const res = NextResponse.next();
     res.cookies.set('csrf', rid(32), { httpOnly:false, sameSite:'lax', secure: process.env.NODE_ENV==='production', path:'/' });
     return res;
   }
-
-  // Gate APENAS para /admin e /api/admin/*
   const p = req.nextUrl.pathname;
   const needsAuth = p.startsWith('/admin') || (p.startsWith('/api/admin') && !p.startsWith('/api/admin/login') && !p.startsWith('/api/admin/logout'));
   if (!needsAuth) return NextResponse.next();
@@ -26,5 +23,4 @@ export function middleware(req: NextRequest){
   return NextResponse.redirect(url);
 }
 
-// 👇 middleware só roda onde realmente precisa
 export const config = { matcher: ['/admin/:path*', '/api/admin/:path*'] };
