@@ -1,4 +1,3 @@
-// app/api/reports/route.ts
 import { NextResponse } from 'next/server';
 import { list, put } from '@vercel/blob';
 
@@ -16,7 +15,7 @@ export async function GET() {
     await put(INDEX_PATH, JSON.stringify([], null, 2), {
       access: 'public',
       addRandomSuffix: false,
-      contentType: 'application/json',
+      contentType: 'application/json'
     });
     return NextResponse.json([]);
   }
