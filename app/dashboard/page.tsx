@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import CountryCodeLookup from '@/components/CountryCodeLookup';
 import aggregates from '@/data/aggregates.json';
 import {
@@ -51,16 +51,6 @@ export default function Dashboard() {
   const [month, setMonth] = useState<string>(normalizeMonth((aggregates as any).defaultMonth));
   const [selected, setSelected] = useState<string>('BRA');
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
-
-  // --- Listener para integrar a busca de siglas com o mapa ---
-  useEffect(() => {
-    function onSelect(ev: any) {
-      const code = ev?.detail?.code;
-      if (code) setSelected(String(code).toUpperCase());
-    }
-    window.addEventListener('ufo:selectCountry', onSelect as any);
-    return () => window.removeEventListener('ufo:selectCountry', onSelect as any);
-  }, []);
 
   const map = useMemo(()=> ({ ...(byMonth[month] || {}) }), [byMonth, month]);
   const monthData: CountryData[] = useMemo(
@@ -196,7 +186,8 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={months.map(m=>({ month:m, count: Number((byMonth[m]||{})[selected]||0) }))}>
                   <XAxis dataKey="month" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" allow decimals={false as any} />
+                  {/* CORRIGIDO: allowDecimals */}
+                  <YAxis stroke="#94a3b8" allowDecimals={false} />
                   <Tooltip />
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                   <Line type="monotone" dataKey="count" stroke="#60a5fa" dot />
@@ -205,9 +196,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* >>> NOVO: Busca de siglas ISO-3 ao lado do mapa <<< */}
+          {/* Busca de siglas ISO-3 ao lado do mapa */}
           <h3 className="font-semibold mt-6 mb-2">Buscar sigla de país (ISO-3)</h3>
-          <CountryCodeLookup />
+          <CountryCodeLookup onPick={(code3) => setSelected(code3)} />
 
           {/* Lista fallback (continua funcionando) */}
           <h3 className="font-semibold mt-6 mb-2">Selecione pela lista (fallback)</h3>
