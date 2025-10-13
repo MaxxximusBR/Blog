@@ -2,34 +2,31 @@
   "name": "ufo-anuario-blog",
   "version": "5.1.0",
   "private": true,
-  "engines": { "node": "20.x" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@vercel/blob": "^0.20.0",
     "next": "14.2.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-pdf": "7.7.1",
-    "pdfjs-dist": "4.8.69",
-    "recharts": "2.12.7",
-    "react-simple-maps": "3.0.0",
-    "d3-scale": "4.0.2",
-    "world-atlas": "2.0.2",
-    "topojson-client": "3.1.0",
-    "js-cookie": "3.0.5",
-    "otplib": "^12.0.1"
-    "i18n-iso-countries": "^7.11.0"
+    "recharts": "^2.10.3",
+    "react-simple-maps": "^3.0.0",
+    "d3-scale": "^4.0.2",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
-    "typescript": "5.6.2",
-    "@types/react": "18.2.45",
-    "@types/node": "20.11.30",
-    "tailwindcss": "3.4.10",
-    "postcss": "8.4.39",
-    "autoprefixer": "10.4.19"
+    "@types/node": "^20.12.7",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
