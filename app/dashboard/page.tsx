@@ -12,44 +12,100 @@ import { ComposableMap, Geographies, Geography, Graticule } from 'react-simple-m
 import { scaleQuantize } from 'd3-scale';
 import * as topojson from 'topojson-client';
 
-// dataset do world-atlas (TopoJSON com id numérico)
+// TopoJSON do world-atlas (ids numéricos M49)
 import worldData from 'world-atlas/countries-110m.json' assert { type: 'json' };
 
-// conversor M49 -> ISO-3
+// i18n-iso-countries para conversões ISO
 import countries from 'i18n-iso-countries';
 import pt from 'i18n-iso-countries/langs/pt.json';
+import en from 'i18n-iso-countries/langs/en.json';
 countries.registerLocale(pt);
+countries.registerLocale(en);
 
 type CountryData = { code: string; name: string; count: number };
 
-// nomes conhecidos (fallback simpático)
+// alguns nomes em PT para deixar tooltip amigável
 const codeToName: Record<string, string> = {
   USA:'Estados Unidos', BRA:'Brasil', ARG:'Argentina', CHL:'Chile', COL:'Colômbia',
   PER:'Peru', DNK:'Dinamarca', CAN:'Canadá', AUS:'Austrália', MEX:'México', JPN:'Japão',
 };
 
-// normaliza mês (YYYY-MM)
+// apelidos/ajustes pontuais
+const ALIASES: Record<string,string> = {
+  UK: 'GBR',
+  UKE: 'GBR',
+  U.S.A: 'USA',
+  UNITED_STATES: 'USA',
+  RUSSIA: 'RUS',
+  BOLIVIA: 'BOL',
+  VENEZUELA: 'VEN',
+  KOSOVO: 'XKX', // não-ISO mas aparece em coleções
+};
+
 const normalizeMonth = (m: string) =>
   m.replace(/(\d{4})-(\d{1,2})/, (_, y, mm) => `${y}-${String(mm).padStart(2,'0')}`);
+
+// --- helpers de código de país ------------------------------------------------
+function toISO3Loose(input: string): string {
+  let c = String(input || '').trim();
+
+  if (!c) return '';
+
+  // normalizações simples
+  c = c.replace(/\s+/g, ' ').toUpperCase();
+  if (ALIASES[c]) return ALIASES[c];
+
+  // numérico (M49)
+  if (/^\d{1,3}$/.test(c)) {
+    const a3 = countries.numericToAlpha3(c.padStart(3,'0'));
+    return (a3 || c).toUpperCase();
+  }
+  if (/^\d{3}$/.test(c)) {
+    const a3 = countries.numericToAlpha3(c);
+    return (a3 || c).toUpperCase();
+  }
+
+  // ISO-2 -> ISO-3
+  if (/^[A-Z]{2}$/.test(c)) {
+    const a3 = countries.alpha2ToAlpha3(c);
+    return (a3 || c).toUpperCase();
+  }
+
+  // já é ISO-3?
+  if (/^[A-Z]{3}$/.test(c)) return c;
+
+  // tentar por nome (PT e EN)
+  const byPt = countries.getAlpha3Code(c, 'pt');
+  if (byPt) return byPt.toUpperCase();
+
+  const byEn = countries.getAlpha3Code(c, 'en');
+  if (byEn) return byEn.toUpperCase();
+
+  return c; // fallback (melhor ter algo do que nada)
+}
 
 export default function Dashboard() {
   // GeoJSON a partir do TopoJSON
   const geo = useMemo(() => {
-    const feat = topojson.feature(
+    return topojson.feature(
       worldData as any,
       (worldData as any).objects.countries
     ) as any;
-    return feat;
   }, []);
 
-  // agrega por mês (normalizando as chaves)
+  // normaliza agregados: qualquer chave vira ISO-3
   const byMonth = useMemo(() => {
     const out: Record<string, Record<string, number>> = {};
     Object.entries((aggregates as any).byMonth).forEach(([m, obj]: any) => {
-      const mm = normalizeMonth(m); out[mm] = {};
-      Object.entries(obj).forEach(([c, v]: any) => {
-        out[mm][String(c).toUpperCase()] = Number(v) || 0;
+      const mm = normalizeMonth(m);
+      const bucket: Record<string, number> = {};
+      Object.entries(obj || {}).forEach(([key, val]) => {
+        const a3 = toISO3Loose(String(key));
+        if (!a3) return;
+        const n = Number(val) || 0;
+        bucket[a3] = (bucket[a3] || 0) + n;
       });
+      out[mm] = bucket;
     });
     return out;
   }, []);
@@ -60,6 +116,7 @@ export default function Dashboard() {
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   const map = useMemo(()=> ({ ...(byMonth[month] || {}) }), [byMonth, month]);
+
   const monthData: CountryData[] = useMemo(()=> (
     Object.entries(map)
       .map(([code, count]) => ({
@@ -71,26 +128,25 @@ export default function Dashboard() {
   ), [map]);
 
   const maxValue = useMemo(()=> Math.max(1, ...Object.values(map).map(Number)), [map]);
+
   const scale = useMemo(()=> (scaleQuantize<number, string>() as any)
     .domain([0, maxValue])
     .range(['#e0e7ff','#c7d2fe','#a5b4fc','#818cf8','#6366f1','#4f46e5']), [maxValue]);
 
   const valueFor = (code: string) => Number(map[code] || 0);
 
-  // Converte ID numérico (M49 do world-atlas) -> ISO-3 (ex.: "076" -> "BRA")
-  function getISO3fromGeo(geo: any): string {
-    const num = String(geo.id ?? '').padStart(3, '0');        // ex.: 76 -> "076"
-    const a3 = countries.numericToAlpha3(num)                 // "BRA" | undefined
-            || geo.properties?.ISO_A3
-            || geo.properties?.iso_a3
-            || '';
+  // ID numérico (M49) -> ISO-3 para as geometrias
+  function iso3FromGeo(geo: any): string {
+    const num = String(geo.id ?? '').padStart(3,'0');      // ex.: 840 -> "840"
+    const a3 =
+      countries.numericToAlpha3(num) ||
+      geo.properties?.ISO_A3 ||
+      geo.properties?.iso_a3 ||
+      '';
     return String(a3 || '').toUpperCase();
   }
 
-  // Nome amigável (usa fallback local)
-  function nameFor(code: string) {
-    return codeToName[code] || code;
-  }
+  const nameFor = (code: string) => codeToName[code] || code || '—';
 
   return (
     <div className="space-y-8">
@@ -134,13 +190,13 @@ export default function Dashboard() {
             <div className="h-[520px] rounded-xl overflow-hidden border border-gray-700">
               <ComposableMap
                 projection="geoEqualEarth"
-                projectionConfig={{ scale: 160, center: [0, 15] }}
+                projectionConfig={{ scale: 165, center: [0, 12] }}
                 style={{ width: '100%', height: '100%' }}
               >
                 <Graticule stroke="#1f2937" strokeWidth={0.5} />
                 <Geographies geography={geo as any}>
                   {({geographies})=> geographies.map((g)=>{
-                    const code = getISO3fromGeo(g);
+                    const code = iso3FromGeo(g);
                     const value = valueFor(code);
                     const fill = value>0 ? scale(value) : '#0f172a';
                     const isSelected = selected === code;
@@ -156,7 +212,7 @@ export default function Dashboard() {
                         style={{
                           default:{
                             fill,
-                            stroke: isSelected ? '#fbbf24' : '#334155',    // borda controlada aqui
+                            stroke: isSelected ? '#fbbf24' : '#334155',
                             strokeWidth: isSelected ? 1.6 : 0.6,
                             vectorEffect: 'non-scaling-stroke' as any,
                             outline:'none',
