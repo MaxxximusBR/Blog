@@ -7,13 +7,24 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 pdfjs.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
-export default function PdfViewer({ url }: { url: string }) {
+type Props = {
+  /** preferencial: use `url`; compat: `fileUrl` */
+  url?: string;
+  fileUrl?: string;
+};
+
+export default function PdfViewer(props: Props) {
+  const src = props.url ?? props.fileUrl ?? '';
   const [numPages, setNumPages] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
+  if (!src) {
+    return <div className="text-sm opacity-70">PDF não informado.</div>;
+  }
+
   return (
     <div>
-      <Document file={url} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
+      <Document file={src} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
         <Page pageNumber={page} />
       </Document>
 
