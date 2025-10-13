@@ -12,13 +12,26 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 
 type CountryData = { code: string; name: string; count: number };
 
-const codeToName: Record<string, string> = { USA:'Estados Unidos', BRA:'Brasil', ARG:'Argentina', CHL:'Chile', COL:'Colômbia', PER:'Peru', DNK:'Dinamarca', CAN:'Canadá', AUS:'Austrália', MEX:'México', JPN:'Japão' };
+const codeToName: Record<string, string> = {
+  USA:'Estados Unidos', BRA:'Brasil', ARG:'Argentina', CHL:'Chile', COL:'Colômbia',
+  PER:'Peru', DNK:'Dinamarca', CAN:'Canadá', AUS:'Austrália', MEX:'México', JPN:'Japão',
+};
 
-const NUM_TO_ISO3: Record<number, string> = { 840:'USA', 76:'BRA', 32:'ARG', 152:'CHL', 170:'COL', 604:'PER', 208:'DNK', 124:'CAN', 36:'AUS', 484:'MEX', 392:'JPN' };
+const NUM_TO_ISO3: Record<number, string> = {
+  840:'USA', 76:'BRA', 32:'ARG', 152:'CHL', 170:'COL', 604:'PER',
+  208:'DNK', 124:'CAN', 36:'AUS', 484:'MEX', 392:'JPN',
+};
 
-const ALIASES: Record<string, string> = { UK:'GBR', GB:'GBR', ENGLAND:'GBR', WALES:'GBR', SCOTLAND:'GBR', US:'USA', UAE:'ARE', BOLIVIA:'BOL', RUSSIA:'RUS', SOUTH_KOREA:'KOR', NORTH_KOREA:'PRK', IRAN:'IRN', VIETNAM:'VNM' };
+const ALIASES: Record<string, string> = {
+  UK:'GBR', GB:'GBR', ENGLAND:'GBR', WALES:'GBR', SCOTLAND:'GBR',
+  US:'USA', UAE:'ARE', RUSSIA:'RUS', BOLIVIA:'BOL', IRAN:'IRN',
+  VIETNAM:'VNM', SOUTH_KOREA:'KOR', NORTH_KOREA:'PRK'
+};
 
 const COLOR_RAMP = ['#e0e7ff','#c7d2fe','#a5b4fc','#818cf8','#6366f1','#4f46e5'];
+const MAP_OUTLINE = '#1c2a44';           // contorno padrão (escuro)
+const MAP_OUTLINE_HL = '#fbbf24';        // contorno país selecionado (amarelo)
+const FILL_ZERO = '#112036';             // fill para países com 0 (contrasta com o fundo)
 
 const normalizeMonth = (m: string) => m.replace(/(\d{4})-(\d{1,2})/, (_, y, mm) => `${y}-${String(mm).padStart(2,'0')}`);
 const normalizeCode = (raw: string) => { const t = String(raw||'').trim().toUpperCase(); return t ? (ALIASES[t] || t) : ''; };
@@ -32,10 +45,8 @@ function getISO3fromGeo(geo:any):string{
 }
 
 export default function Dashboard(){
-  // topojson -> geojson
   const geo = useMemo(()=> topojson.feature(worldData as any, (worldData as any).objects.countries) as any, []);
 
-  // dados por mês
   const byMonth = useMemo(()=>{
     const out: Record<string, Record<string, number>> = {};
     Object.entries((aggregates as any).byMonth).forEach(([m, obj]: any)=>{
@@ -47,18 +58,18 @@ export default function Dashboard(){
 
   const months = useMemo(()=> (aggregates as any).global.map((g:any)=> normalizeMonth(g.month)), []);
   const [month, setMonth] = useState<string>(normalizeMonth((aggregates as any).defaultMonth));
-  const [selected, setSelected] = useState<string>(''); // começa sem país fixado
-  const [tip, setTip] = useState<{text:string; x:number; y:number} | null>(null); // tooltip do hover
+  const [selected, setSelected] = useState<string>(''); // inicia sem país fixo
+  const [tip, setTip] = useState<{text:string; x:number; y:number} | null>(null);
 
   const map = useMemo(()=> ({ ...(byMonth[month] || {}) }), [byMonth, month]);
   const maxValue = useMemo(()=> Math.max(1, ...Object.values(map), 1), [map]);
   const scale = useMemo(()=> (scaleQuantize<number,string>() as any).domain([0,maxValue]).range(COLOR_RAMP), [maxValue]);
 
+  const valueFor = (code:string)=> Number(map[normalizeCode(code)] || 0);
+
   const monthData: CountryData[] = useMemo(()=> Object.entries(map)
     .map(([code, count])=>({ code, name: codeToName[code] || code, count: Number(count) }))
     .sort((a,b)=> b.count - a.count), [map]);
-
-  const valueFor = (code:string)=> Number(map[normalizeCode(code)] || 0);
 
   const seriesSelected = useMemo(()=> months.map(m=>({ month:m, count: Number((byMonth[m]||{})[normalizeCode(selected)] || 0) })), [months, byMonth, selected]);
 
@@ -92,7 +103,7 @@ export default function Dashboard(){
                   {({ geographies }) => geographies.map((g) => {
                     const code = getISO3fromGeo(g);
                     const val = valueFor(code);
-                    const fill = val > 0 ? scale(val) : '#0f172a';
+                    const fill = val > 0 ? scale(val) : FILL_ZERO;
                     const isSel = normalizeCode(selected) === code;
                     const label = `${codeToName[code] || code || '—'} (${code||'?'}) — ${val} casos em ${month}`;
                     return (
@@ -104,9 +115,9 @@ export default function Dashboard(){
                         onMouseLeave={()=> setTip(null)}
                         onClick={()=> code && setSelected(code)}
                         style={{
-                          default:{ fill, stroke: isSel ? '#fbbf24' : '#0b1220', strokeWidth: isSel ? 1.6 : 0.6, outline:'none', cursor: code ? 'pointer' : 'default' },
-                          hover:{ fill: code ? '#60a5fa' : fill, stroke:'#0b1220', outline:'none', cursor: code ? 'pointer' : 'default' },
-                          pressed:{ fill: code ? '#2563eb' : fill, outline:'none', cursor: code ? 'pointer' : 'default' }
+                          default:{ fill, outline: isSel ? MAP_OUTLINE_HL : MAP_OUTLINE, cursor: code ? 'pointer' : 'default' },
+                          hover:{   fill: code ? '#60a5fa' : fill, outline: MAP_OUTLINE, cursor: code ? 'pointer' : 'default' },
+                          pressed:{ fill: code ? '#2563eb' : fill, outline: MAP_OUTLINE, cursor: code ? 'pointer' : 'default' }
                         }}
                       />
                     );
@@ -167,7 +178,7 @@ export default function Dashboard(){
   );
 }
 
-/* utilitários esperados:
+/* utilitários esperados no CSS:
 .card => rounded-2xl bg-[#0e1624] p-5 shadow-lg
 .btn  => px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm
 .hint => opacity-75
