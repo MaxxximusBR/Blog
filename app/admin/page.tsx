@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react';
 // Se você criou os arquivos em components/admin/:
-import NewsForm from '@/components/admin/NewsForm';
-import NewsList from '@/components/admin/NewsList';
+import NewsForm from '../../components/admin/NewsForm';
+import NewsList from '../../components/admin/NewsList';
 // Se o alias "@/"" não existir no seu tsconfig, troque as 2 linhas acima por:
 // import NewsForm from '../../components/admin/NewsForm';
 // import NewsList from '../../components/admin/NewsList';
