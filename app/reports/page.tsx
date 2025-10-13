@@ -10,7 +10,7 @@ type Entry = {
   slug: string;            // 'YYYY-MM'
   title: string;
   summary?: string;
-  file: string;            // URL do PDF no Blob
+  file: string;
   meta?: { global?: number };
 };
 
@@ -20,8 +20,13 @@ function labelFromSlug(slug: string) {
   return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 }
 
+function clamp3(text?: string) {
+  if (!text) return 'Sem resumo disponível.';
+  if (text.length <= 240) return text;
+  return text.slice(0, 237) + '…';
+}
+
 export default async function RelatoriosPage() {
-  // Carrega o índice do Blob (indexes/reports.json)
   let items: Entry[] = [];
   try {
     const L = await list({ prefix: 'indexes/' });
@@ -32,9 +37,11 @@ export default async function RelatoriosPage() {
     }
   } catch {}
 
-  const ordered = items
+  // remove itens inválidos e ordena
+  const ordered = (items || [])
+    .filter(e => e && e.slug && e.file)
     .slice()
-    .sort((a, b) => (a.slug < b.slug ? 1 : -1)); // mais recentes primeiro
+    .sort((a, b) => (a.slug < b.slug ? 1 : -1));
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
@@ -43,36 +50,48 @@ export default async function RelatoriosPage() {
         <p className="opacity-75">Mensais, disponíveis para leitura e download.</p>
       </section>
 
-      <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {ordered.map((e) => (
-          <article key={e.slug} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg">
-            <div className="text-xs opacity-70 mb-1">{labelFromSlug(e.slug)}</div>
-            <h2 className="font-semibold mb-2">{e.title || `Relatório ${e.slug}`}</h2>
-            {e.summary && <p className="text-sm opacity-80 mb-3">{e.summary}</p>}
+      {ordered.length === 0 ? (
+        <div className="opacity-70">Nenhum relatório disponível ainda.</div>
+      ) : (
+        <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {ordered.map((e) => (
+            <article key={e.slug} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col">
+              <div className="text-xs opacity-70 mb-1">{labelFromSlug(e.slug)}</div>
+              <h2 className="font-semibold mb-2 min-h-[3rem]">{e.title || `Relatório ${e.slug}`}</h2>
 
-            <div className="flex gap-2 mt-2">
-              <a
-                href={e.file}
-                target="_blank" rel="noopener noreferrer"
-                className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
-              >
-                Ver online
-              </a>
-              <a
-                href={e.file}
-                download
-                className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
-              >
-                Baixar PDF
-              </a>
-            </div>
+              <p className="text-sm opacity-80 mb-4" style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 3 as any,
+                WebkitBoxOrient: 'vertical' as any,
+                overflow: 'hidden'
+              }}>
+                {clamp3(e.summary)}
+              </p>
 
-            {e.meta?.global ? (
-              <div className="text-xs opacity-70 mt-3">Casos globais: {e.meta.global}</div>
-            ) : null}
-          </article>
-        ))}
-      </section>
+              <div className="mt-auto flex gap-2">
+                <a
+                  href={e.file}
+                  target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
+                >
+                  Ver online
+                </a>
+                <a
+                  href={e.file}
+                  download
+                  className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
+                >
+                  Baixar PDF
+                </a>
+              </div>
+
+              {e.meta?.global ? (
+                <div className="text-xs opacity-70 mt-3">Casos globais: {e.meta.global}</div>
+              ) : null}
+            </article>
+          ))}
+        </section>
+      )}
     </main>
   );
 }
