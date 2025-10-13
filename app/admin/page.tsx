@@ -1,5 +1,6 @@
 'use client';
 
+import ReportsList from '../../components/admin/ReportsList';
 import { useRef, useState } from 'react';
 import NewsForm from '../../components/admin/NewsForm';
 import NewsList from '../../components/admin/NewsList';
@@ -134,7 +135,11 @@ export default function AdminPage() {
           <pre className="whitespace-pre-wrap text-sm mt-3">{msg}</pre>
         </div>
       </section>
-
+{/* --- Gerenciar relatórios (listar/apagar) --- */}
+<section className="rounded-2xl border border-white/10 bg-black/20 p-5">
+  <h2 className="text-xl font-semibold mb-4">Relatórios cadastrados</h2>
+  <ReportsList />
+</section>
       {/* --- Ferramentas (Reindexar) --- */}
       <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
         <h2 className="text-xl font-semibold mb-4">Ferramentas</h2>
