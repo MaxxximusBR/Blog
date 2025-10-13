@@ -1,48 +1,85 @@
 'use client';
+
 import { useMemo, useState } from 'react';
-import countries from 'i18n-iso-countries';
-import pt from 'i18n-iso-countries/langs/pt.json';
 
-// registra nomes em PT
-countries.registerLocale(pt as any);
+type Props = {
+  onPick: (iso3: string) => void;
+  className?: string; // <- NOVO
+};
 
-type Props = { onPick: (code3: string) => void };
+// Lista ISO-3 básica (pode ampliar à vontade)
+const COUNTRIES: { code: string; name: string }[] = [
+  { code: 'AFG', name: 'Afeganistão' },
+  { code: 'AGO', name: 'Angola' },
+  { code: 'ALB', name: 'Albânia' },
+  { code: 'DEU', name: 'Alemanha' },
+  { code: 'AND', name: 'Andorra' },
+  { code: 'ARE', name: 'Emirados Árabes Unidos' },
+  { code: 'ARG', name: 'Argentina' },
+  { code: 'AUS', name: 'Austrália' },
+  { code: 'BRA', name: 'Brasil' },
+  { code: 'CAN', name: 'Canadá' },
+  { code: 'CHL', name: 'Chile' },
+  { code: 'CHN', name: 'China' },
+  { code: 'COL', name: 'Colômbia' },
+  { code: 'DNK', name: 'Dinamarca' },
+  { code: 'ESP', name: 'Espanha' },
+  { code: 'FRA', name: 'França' },
+  { code: 'GBR', name: 'Reino Unido' },
+  { code: 'ITA', name: 'Itália' },
+  { code: 'JPN', name: 'Japão' },
+  { code: 'MEX', name: 'México' },
+  { code: 'PER', name: 'Peru' },
+  { code: 'PRT', name: 'Portugal' },
+  { code: 'RUS', name: 'Rússia' },
+  { code: 'USA', name: 'Estados Unidos' },
+  // ...adicione mais conforme precisar
+];
 
-export default function CountryCodeLookup({ onPick }: Props) {
-  const all = useMemo(() => {
-    const names2 = countries.getNames('pt', { select: 'official' }) as Record<string, string>;
-    return Object.entries(names2)
-      .map(([a2, name]) => {
-        const a3 = countries.alpha2ToAlpha3(a2);
-        return a3 ? { code: a3, name } : null;
-      })
-      .filter(Boolean) as { code: string; name: string }[];
-  }, []);
-
+export default function CountryCodeLookup({ onPick, className }: Props) {
   const [q, setQ] = useState('');
-  const list = useMemo(() => {
+
+  const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return all;
-    return all.filter(i => i.code.toLowerCase().includes(term) || i.name.toLowerCase().includes(term));
-  }, [all, q]);
+    if (!term) return COUNTRIES;
+    return COUNTRIES.filter(
+      (c) =>
+        c.code.toLowerCase().includes(term) ||
+        c.name.toLowerCase().includes(term)
+    );
+  }, [q]);
+
+  function choose(code: string) {
+    onPick(code.toUpperCase());
+    setQ('');
+  }
 
   return (
-    <div className="space-y-2">
+    <div className={className}>
+      <label className="text-sm block mb-2">Buscar sigla de país (ISO-3)</label>
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Buscar país ou sigla (ex.: BRA, Brasil)"
-        className="w-full bg-black/40 border border-gray-700 rounded px-3 py-1"
+        className="w-full bg-black/40 border border-gray-700 rounded px-3 py-2 mb-2"
       />
-      <ul className="max-h-64 overflow-auto text-sm divide-y divide-gray-800">
-        {list.map(i => (
-          <li key={i.code} className="py-1 flex items-center justify-between">
-            <button className="hover:underline text-left" onClick={() => onPick(i.code)}>
-              {i.name} <span className="text-gray-500">({i.code})</span>
-            </button>
-          </li>
+
+      <div className="max-h-64 overflow-auto rounded border border-gray-800 divide-y divide-gray-800">
+        {filtered.map((c) => (
+          <button
+            key={c.code}
+            type="button"
+            onClick={() => choose(c.code)}
+            className="w-full text-left px-3 py-2 hover:bg-white/5 flex items-center justify-between"
+          >
+            <span>{c.name}</span>
+            <span className="text-xs text-gray-400">{c.code}</span>
+          </button>
         ))}
-      </ul>
+        {filtered.length === 0 && (
+          <div className="px-3 py-2 text-sm text-gray-400">Nada encontrado.</div>
+        )}
+      </div>
     </div>
   );
 }
