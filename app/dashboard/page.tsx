@@ -118,39 +118,63 @@ export default function Dashboard() {
 
           <div className="relative">
             <div className="h-[520px] rounded-xl overflow-hidden border border-gray-700">
-              <ComposableMap projectionConfig={{ scale: 150 }}>
-                <Graticule stroke="#1f2937" strokeWidth={0.5} />
-                <Geographies geography={geo as any}>
-                  {({geographies})=> geographies.map((g)=>{
-                    const code = getISO3fromGeo(g);
-                    const value = valueFor(code);
-                    const fill = value>0 ? scale(value) : '#0f172a';
-                    const isSelected = selected === code;
-                    return(
-                      <Geography
-                        key={g.rsmKey}
-                        geography={g}
-                        onMouseEnter={(e)=> setTip({
-                          text: `${codeToName[code] || code || '—'} (${code||'?'}) — ${value} casos em ${month}`,
-                          x:e.clientX, y:e.clientY
-                        })}
-                        onMouseMove={(e)=> setTip({
-                          text: `${codeToName[code] || code || '—'} (${code||'?'}) — ${value} casos em ${month}`,
-                          x:e.clientX, y:e.clientY
-                        })}
-                        onMouseLeave={()=> setTip(null)}
-                        onClick={()=> code && setSelected(code)}
-                        style={{
-                          default:{ fill, stroke: isSelected ? '#fbbf24' : '#0b1220', strokeWidth: isSelected? 1.5 : 0.5, outline:'none', cursor: code ? 'pointer' : 'default' },
-                          hover:{ fill: code ? '#60a5fa' : fill, stroke:'#0b1220', outline:'none', cursor: code ? 'pointer' : 'default' },
-                          pressed:{ fill: code ? '#2563eb' : fill, outline:'none', cursor: code ? 'pointer' : 'default' }
-                        }}
-                      />
-                    );
-                  })}
-                </Geographies>
-              </ComposableMap>
-            </div>
+  <ComposableMap
+    projection="geoEqualEarth"
+    projectionConfig={{ scale: 160, center: [0, 15] }}
+    style={{ width: '100%', height: '100%' }}
+  >
+    <Graticule stroke="#1f2937" strokeWidth={0.5} />
+    <Geographies geography={geo as any}>
+      {({ geographies }) =>
+        geographies.map((g) => {
+          const code = getISO3fromGeo(g);
+          const value = valueFor(code);
+          const fill = value > 0 ? scale(value) : '#0f172a';
+          const isSelected = selected === code;
+          return (
+            <Geography
+              key={g.rsmKey}
+              geography={g}
+              onMouseEnter={(e) =>
+                setTip({
+                  text: `${codeToName[code] || code || '—'} (${code || '?'}) — ${value} casos em ${month}`,
+                  x: e.clientX,
+                  y: e.clientY,
+                })
+              }
+              onMouseMove={(e) =>
+                setTip({
+                  text: `${codeToName[code] || code || '—'} (${code || '?'}) — ${value} casos em ${month}`,
+                  x: e.clientX,
+                  y: e.clientY,
+                })
+              }
+              onMouseLeave={() => setTip(null)}
+              onClick={() => code && setSelected(code)}
+              style={{
+                default: {
+                  fill,
+                  stroke: isSelected ? '#fbbf24' : '#0b1220',
+                  strokeWidth: isSelected ? 1.5 : 0.5,
+                  outline: 'none',
+                  cursor: code ? 'pointer' : 'default',
+                },
+                hover: {
+                  fill: code ? '#60a5fa' : fill,
+                  stroke: '#0b1220',
+                  outline: 'none',
+                  cursor: code ? 'pointer' : 'default',
+                },
+                pressed: { fill: code ? '#2563eb' : fill, outline: 'none', cursor: code ? 'pointer' : 'default' },
+              }}
+            />
+          );
+        })
+      }
+    </Geographies>
+  </ComposableMap>
+</div>
+
             {tip && (
               <div
                 className="pointer-events-none fixed z-50 px-2 py-1 rounded bg-black/80 border border-gray-700 text-xs"
