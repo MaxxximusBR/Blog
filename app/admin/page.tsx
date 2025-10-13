@@ -1,5 +1,7 @@
 'use client';
 
+import NewsForm from '@/components/admin/NewsForm';
+import NewsList from '@/components/admin/NewsList';
 import ReportsList from '../../components/admin/ReportsList';
 import { useRef, useState } from 'react';
 import NewsForm from '../../components/admin/NewsForm';
@@ -158,6 +160,15 @@ export default function AdminPage() {
         <h2 className="text-xl font-semibold mb-4">Notícias</h2>
         <NewsForm />
         <NewsList />
+        {/* ---- Notícias (CRUD) ---- */}
+<div className="mt-12 rounded-2xl border border-white/10 bg-black/20 p-5">
+  <h2 className="text-xl font-semibold mb-4">Notícias</h2>
+  <NewsForm />
+  <div className="mt-6">
+    <NewsList />
+  </div>
+</div>
+
       </section>
     </div>
   );
