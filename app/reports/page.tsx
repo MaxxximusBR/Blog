@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { list } from '@vercel/blob';
-import PdfViewer from '@/components/PdfViewer';
 
 export const metadata: Metadata = {
-  title: 'Relatório | Anuário OVNIs 2025',
-  description: 'Leitura do relatório mensal (PDF).',
+  title: 'Relatórios | Anuário OVNIs 2025',
+  description: 'Lista de relatórios mensais (PDF).',
 };
 
-// garante que sempre pegue o índice mais recente no deploy
 export const dynamic = 'force-dynamic';
 
 type Entry = {
@@ -37,50 +35,68 @@ async function loadIndex(): Promise<Entry[]> {
   return [];
 }
 
-export default async function ReportPage({ params }: { params: { slug: string } }) {
-  const items = await loadIndex();
-  const report = items.find(e => e.slug === params.slug);
+function clamp3(text?: string) {
+  if (!text) return 'Sem resumo disponível.';
+  if (text.length <= 240) return text;
+  return text.slice(0, 237) + '…';
+}
 
-  if (!report) {
-    return (
-      <main className="max-w-5xl mx-auto p-6 space-y-6">
-        <section className="card">
-          <h1 className="text-2xl font-semibold">Relatório não encontrado</h1>
-          <p className="hint">Verifique o endereço ou volte à lista de relatórios.</p>
-          <div className="mt-4">
-            <Link href="/reports" className="btn">← Voltar aos relatórios</Link>
-          </div>
-        </section>
-      </main>
-    );
-  }
+export default async function ReportsPage() {
+  const items = await loadIndex();
+
+  const ordered = (items || [])
+    .filter(e => e && e.slug && e.file)
+    .slice()
+    .sort((a, b) => (a.slug < b.slug ? 1 : -1));
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
-      <section className="card">
-        <div className="text-xs opacity-70 mb-1">{labelFromSlug(report.slug)}</div>
-        <h1 className="text-2xl font-semibold">{report.title || `Relatório ${report.slug}`}</h1>
-        {report.summary && <p className="opacity-80 mt-2">{report.summary}</p>}
-        {typeof report.meta?.global === 'number' && (
-          <div className="text-xs opacity-70 mt-2">Casos globais: {report.meta.global}</div>
-        )}
-
-        {/* VISOR DO PDF — prop correta é `url` */}
-        <div className="mt-5 border border-white/10 rounded-2xl overflow-hidden">
-          <PdfViewer url={report.file} />
-        </div>
-
-        {/* Ações (sem exibir a URL bruta) */}
-        <div className="mt-4 flex gap-2">
-          <a href={report.file} target="_blank" rel="noopener noreferrer" className="btn">
-            Abrir em nova aba
-          </a>
-          <a href={report.file} download className="btn">
-            Baixar PDF
-          </a>
-          <Link href="/reports" className="btn">← Voltar</Link>
-        </div>
+      <section className="rounded-2xl bg-[#0e1624] px-6 py-5 shadow-lg">
+        <h1 className="text-2xl font-semibold">Relatórios</h1>
+        <p className="opacity-75">Mensais, disponíveis para leitura e download.</p>
       </section>
+
+      {ordered.length === 0 ? (
+        <div className="opacity-70">Nenhum relatório disponível ainda.</div>
+      ) : (
+        <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {ordered.map((e) => (
+            <article key={e.slug} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col">
+              <div className="text-xs opacity-70 mb-1">{labelFromSlug(e.slug)}</div>
+              <h2 className="font-semibold mb-2 min-h-[3rem]">{e.title || `Relatório ${e.slug}`}</h2>
+
+              <p className="text-sm opacity-80 mb-4" style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 3 as any,
+                WebkitBoxOrient: 'vertical' as any,
+                overflow: 'hidden'
+              }}>
+                {clamp3(e.summary)}
+              </p>
+
+              <div className="mt-auto flex gap-2">
+                <Link
+                  href={`/report/${e.slug}`}
+                  className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
+                >
+                  Ler online
+                </Link>
+                <a
+                  href={e.file}
+                  download
+                  className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
+                >
+                  Baixar PDF
+                </a>
+              </div>
+
+              {e.meta?.global ? (
+                <div className="text-xs opacity-70 mt-3">Casos globais: {e.meta.global}</div>
+              ) : null}
+            </article>
+          ))}
+        </section>
+      )}
     </main>
   );
 }
