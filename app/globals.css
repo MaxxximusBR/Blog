@@ -3,6 +3,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* suas classes custom (ok manter) */
+.card { @apply rounded-2xl bg-[#0e1624] p-5 shadow-lg border border-white/10; }
+.btn  { @apply px-3 py-2 rounded bg-white/10 hover:bg-white/20; }
+.hint { @apply text-sm opacity-75; }
+
 :root{ --bg:#0b0f14; --fg:#e6edf3; --card:#0f172a; --border:#1f2937; }
 body{ background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui; }
 a{ color:#93c5fd; }
