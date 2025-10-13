@@ -1,56 +1,46 @@
-import { NextResponse } from "next/server";
-import { list, put } from "@vercel/blob";
+import { list, put } from '@vercel/blob';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-const INDEX = "indexes/news.json";
+type Body = { date?: string; title?: string; url?: string; image?: string };
 
-type News = { id:string; date:string; title:string; url:string; image?:string };
-
-function makeId(date: string, title: string) {
-  const rand = Math.random().toString(36).slice(2,8);
-  return `${date}-${rand}`;
+async function load(): Promise<any[]> {
+  const L = await list({ prefix: 'indexes/' });
+  const it = (L.blobs as any[]).find(b => b.pathname === 'indexes/news.json');
+  if (!it?.url) return [];
+  const r = await fetch(it.url, { cache: 'no-store' });
+  return r.ok ? await r.json() : [];
 }
 
 export async function POST(req: Request) {
   try {
-    const form = await req.formData();
-    const id = String(form.get("id") || "");
-    const date = String(form.get("date") || "").trim();   // YYYY-MM-DD
-    const title = String(form.get("title") || "").trim();
-    const url = String(form.get("url") || "").trim();
-    const image = String(form.get("image") || "").trim() || undefined;
-    if (!date || !title || !url) throw new Error("Campos obrigatórios: date, title, url.");
+    const b = (await req.json()) as Body;
+    const date = String(b.date || '').trim();
+    const title = String(b.title || '').trim();
+    const url = String(b.url || '').trim();
+    const image = String(b.image || '').trim() || undefined;
 
-    // Carrega índice atual
-    let items: News[] = [];
-    const L = await list({ prefix: "indexes/" });
-    const it = (L.blobs as any[]).find(b => b.pathname === INDEX);
-    if (it?.url) {
-      const r = await fetch(it.url, { cache: "no-store" });
-      if (r.ok) items = await r.json();
-    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Response(JSON.stringify({ ok:false, msg:'Data inválida (AAAA-MM-DD).' }), { status: 400 });
+    if (!title) return new Response(JSON.stringify({ ok:false, msg:'Informe o título.' }), { status: 400 });
+    if (!/^https?:\/\//i.test(url)) return new Response(JSON.stringify({ ok:false, msg:'URL externa inválida.' }), { status: 400 });
 
-    if (id) {
-      // update
-      items = items.map(n => n.id === id ? { ...n, date, title, url, image } : n);
-    } else {
-      // create
-      const newItem: News = { id: makeId(date, title), date, title, url, image };
-      items.push(newItem);
-    }
+    const now = Date.now();
+    const id = `n-${date}-${now}`;
+    const item = { id, date, title, url, image };
 
-    items.sort((a,b)=> a.date < b.date ? 1 : -1);
+    const items = await load();
+    items.push(item);
 
-    const saved = await put(INDEX, JSON.stringify(items, null, 2), {
-      access: "public",
-      addRandomSuffix: false,
-      contentType: "application/json",
+    items.sort((a:any,b:any)=> (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? 1 : -1)));
+
+    await put('indexes/news.json', JSON.stringify(items, null, 2), {
+      access: 'public',
+      contentType: 'application/json',
     });
 
-    return NextResponse.json({ ok:true, indexURL: saved.url, count: items.length });
+    return new Response(JSON.stringify({ ok:true, item }), { headers:{'content-type':'application/json'}});
   } catch (e:any) {
-    return NextResponse.json({ ok:false, msg: e?.message || "Falha ao salvar" }, { status: 400 });
+    return new Response(JSON.stringify({ ok:false, msg: e?.message || 'Falha' }), { status: 500 });
   }
 }
