@@ -33,7 +33,7 @@ async function loadIndex(): Promise<Entry[]> {
       const r = await fetch(it.url, { cache: 'no-store' });
       if (r.ok) return (await r.json()) as Entry[];
     }
-  } catch (_) {}
+  } catch {}
   return [];
 }
 
@@ -61,31 +61,21 @@ export default async function ReportPage({ params }: { params: { slug: string } 
         <div className="text-xs opacity-70 mb-1">{labelFromSlug(report.slug)}</div>
         <h1 className="text-2xl font-semibold">{report.title || `Relatório ${report.slug}`}</h1>
         {report.summary && <p className="opacity-80 mt-2">{report.summary}</p>}
-
         {typeof report.meta?.global === 'number' && (
           <div className="text-xs opacity-70 mt-2">Casos globais: {report.meta.global}</div>
         )}
 
-        {/* AQUI: usamos o PdfViewer com a prop correta `url` */}
+        {/* VISOR DO PDF — prop correta é `url` */}
         <div className="mt-5 border border-white/10 rounded-2xl overflow-hidden">
           <PdfViewer url={report.file} />
         </div>
 
-        {/* ações (sem exibir a URL bruta) */}
+        {/* Ações (sem exibir a URL bruta) */}
         <div className="mt-4 flex gap-2">
-          <a
-            href={report.file}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn"
-          >
+          <a href={report.file} target="_blank" rel="noopener noreferrer" className="btn">
             Abrir em nova aba
           </a>
-          <a
-            href={report.file}
-            download
-            className="btn"
-          >
+          <a href={report.file} download className="btn">
             Baixar PDF
           </a>
           <Link href="/reports" className="btn">← Voltar</Link>
