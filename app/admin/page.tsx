@@ -76,6 +76,18 @@ export default function Admin() {
 
         <pre className="whitespace-pre-wrap text-sm mt-3">{msg}</pre>
       </div>
+      // ...código existente do Admin (relatórios)
+
+{/* ---- Notícias (CRUD) ---- */}
+<div className="mt-12 rounded-2xl border border-white/10 bg-black/20 p-5">
+  <h2 className="text-xl font-semibold mb-4">Notícias</h2>
+
+  {/* Formulário de criação */}
+  <NewsForm />
+
+  {/* Lista/remoção */}
+  <NewsList />
+</div>
     </div>
   );
 }
