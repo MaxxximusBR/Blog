@@ -17,8 +17,7 @@
     "d3-scale": "^4.0.2",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2",
-
-    "i18n-iso-countries": "^7.10.0",
+    "i18n-iso-countries": "^7.11.0",
     "react-pdf": "^7.7.0",
     "pdfjs-dist": "^4.4.168"
   },
