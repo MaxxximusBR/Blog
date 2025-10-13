@@ -1,69 +1,64 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CountryCodeLookup from '@/components/CountryCodeLookup';
 import aggregates from '@/data/aggregates.json';
-
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
-  ResponsiveContainer, BarChart, Bar
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
+  BarChart, Bar
 } from 'recharts';
-
 import { ComposableMap, Geographies, Geography, Graticule } from 'react-simple-maps';
 import { scaleQuantize } from 'd3-scale';
 import * as topojson from 'topojson-client';
 import worldData from 'world-atlas/countries-110m.json';
 
-// --- Tipos auxiliares
+// --- Tipos auxiliares ---
 type CountryData = { code: string; name: string; count: number };
 
-// Nome “legível” para alguns códigos comuns (fallback para exibir no tooltip/sidepanel)
+// --- Dicionários básicos (pode expandir quando quiser) ---
 const codeToName: Record<string, string> = {
-  BRA: 'Brasil', ARG: 'Argentina', CHL: 'Chile', COL: 'Colômbia', PER: 'Peru',
-  USA: 'Estados Unidos', CAN: 'Canadá', MEX: 'México', AUS: 'Austrália', JPN: 'Japão',
+  USA: 'Estados Unidos', BRA: 'Brasil', ARG: 'Argentina', CHL: 'Chile', COL: 'Colômbia',
+  PER: 'Peru', DNK: 'Dinamarca', CAN: 'Canadá', AUS: 'Austrália', MEX: 'México', JPN: 'Japão',
 };
 
-// Mapa de ID numérico do topojson → ISO3 (apenas onde o 110m usa numérico)
+// Mapeamento numérico (id do topojson) -> ISO3
 const NUM_TO_ISO3: Record<number, string> = {
   840: 'USA', 76: 'BRA', 32: 'ARG', 152: 'CHL', 170: 'COL', 604: 'PER',
-  124: 'CAN', 484: 'MEX', 36: 'AUS', 392: 'JPN',
+  208: 'DNK', 124: 'CAN', 36: 'AUS', 484: 'MEX', 392: 'JPN',
 };
 
-// Aliases comuns digitados pelo usuário (precisam de aspas quando há ponto!)
+// Apelidos comuns -> ISO3 (todas as chaves precisam ser entre aspas por causa de pontos/traços)
 const ALIASES: Record<string, string> = {
-  UK: 'GBR',
-  UKE: 'GBR',
+  'UK': 'GBR',
+  'UKE': 'GBR',
   'U.S.A': 'USA',
-  UNITED_STATES: 'USA',
-  RUSSIA: 'RUS',
-  BOLIVIA: 'BOL',
-  VENEZUELA: 'VEN',
+  'UNITED_STATES': 'USA',
+  'RUSSIA': 'RUS',
+  'BOLIVIA': 'BOL',
 };
 
-// Normaliza “YYYY-M” → “YYYY-MM”
+// --- Helpers ---
 const normalizeMonth = (m: string) =>
   m.replace(/(\d{4})-(\d{1,2})/, (_, y, mm) => `${y}-${String(mm).padStart(2, '0')}`);
 
-// --- Componente principal
-export default function Dashboard() {
-  // GeoJSON a partir do topojson
-  const geo = useMemo(
-    () =>
-      topojson.feature(
-        worldData as any,
-        (worldData as any).objects.countries
-      ) as any,
-    []
-  );
+const normalizeCode = (c?: string) => (c || '').trim().toUpperCase();
 
-  // Indexa os dados por mês e código ISO3 (em MAIÚSCULAS)
+// ---------------------------
+export default function Dashboard() {
+  // GeoJSON dos países
+  const geo = useMemo(() => {
+    return topojson.feature(worldData as any, (worldData as any).objects.countries) as any;
+  }, []);
+
+  // Estrutura por mês -> { ISO3: valor }
   const byMonth = useMemo(() => {
     const out: Record<string, Record<string, number>> = {};
     Object.entries((aggregates as any).byMonth).forEach(([m, obj]: any) => {
       const mm = normalizeMonth(m);
       out[mm] = {};
       Object.entries(obj).forEach(([c, v]: any) => {
-        out[mm][String(c).toUpperCase()] = Number(v) || 0;
+        const code = normalizeCode(c);
+        out[mm][code] = Number(v) || 0;
       });
     });
     return out;
@@ -74,14 +69,14 @@ export default function Dashboard() {
     []
   );
 
-  // Estado
-  const defaultMonth = normalizeMonth((aggregates as any).defaultMonth);
-  const [month, setMonth] = useState<string>(defaultMonth);
-  const [selected, setSelected] = useState<string>(''); // deixe vazio para não “grudar” S.A. por padrão
-  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [month, setMonth] = useState<string>(normalizeMonth((aggregates as any).defaultMonth));
+  // Inicia com BRA para o painel da direita nunca ficar vazio
+  const [selected, setSelected] = useState<string>('BRA');
 
-  // Dados do mês corrente
+  // Mapa do mês corrente
   const map = useMemo(() => ({ ...(byMonth[month] || {}) }), [byMonth, month]);
+
+  // Lista do mês (ordenada por contagem desc)
   const monthData: CountryData[] = useMemo(
     () =>
       Object.entries(map)
@@ -94,7 +89,15 @@ export default function Dashboard() {
     [map]
   );
 
-  // Escala de cor
+  // Se nada estiver selecionado (ou selecionado não existe naquele mês), escolhe o "top" do mês
+  useEffect(() => {
+    if (!selected || !map[selected]) {
+      const best = monthData[0]?.code;
+      if (best) setSelected(best);
+    }
+  }, [month, monthData, map, selected]);
+
+  // Escala de cor do mapa
   const maxValue = useMemo(() => Math.max(1, ...Object.values(map), 1), [map]);
   const scale = useMemo(
     () =>
@@ -104,33 +107,40 @@ export default function Dashboard() {
     [maxValue]
   );
 
-  const valueFor = (code?: string) => Number(code ? map[code] || 0 : 0);
+  const valueFor = (code: string) => Number(map[code] || 0);
 
-  // Extrai ISO3 do feature do mapa
+  // Extrai ISO3 de um "geography" do react-simple-maps
   function getISO3fromGeo(g: any): string {
-    // 1) id numérico → tabela
     const num = Number(g.id);
     if (!Number.isNaN(num) && NUM_TO_ISO3[num]) return NUM_TO_ISO3[num];
-    // 2) propriedades com ISO A3
+
     const a3 =
       g.properties?.ISO_A3 ||
       g.properties?.ISO_A3_EH ||
       g.properties?.ADM0_A3 ||
-      g.properties?.isocode ||
+      g.properties?.BRK_A3 ||
       '';
-    if (a3 && a3 !== '-99') return String(a3).toUpperCase();
+    const normalized = normalizeCode(a3);
+    if (normalized && normalized !== '-99') return normalized;
+
     return '';
   }
 
-  // Normaliza entrada digitada ou vinda do seletor
-  function normalizeCode(input: string) {
-    if (!input) return '';
-    const raw = input.trim().toUpperCase().replace(/\s+/g, '_');
-    if (ALIASES[raw]) return ALIASES[raw];
-    if (/^[A-Z]{3}$/.test(raw)) return raw; // já é ISO3
-    // ISO2 muito comum: tenta via dados do mês (se houver país com esse nome/código como chave)
-    // Caso queira algo mais robusto, mantenha a busca pelo CountryCodeLookup (abaixo) como fonte principal.
-    return raw;
+  // Série para o gráfico "Detalhes do país"
+  const series = useMemo(
+    () =>
+      months.map((m) => ({
+        month: m,
+        count: Number(((byMonth[m] || {})[selected] || 0)),
+      })),
+    [months, byMonth, selected]
+  );
+
+  // Entrada manual de sigla
+  function onManualCode(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const aliased = ALIASES[normalizeCode(raw)];
+    setSelected(normalizeCode(aliased || raw));
   }
 
   return (
@@ -168,13 +178,12 @@ export default function Dashboard() {
                 ))}
               </select>
             </div>
-
             <div className="flex items-center gap-2">
               <input
                 placeholder="Código do país (ex.: BRA)"
                 className="bg-black/40 border border-gray-700 rounded px-3 py-1 w-56"
                 value={selected}
-                onChange={(e) => setSelected(normalizeCode(e.target.value))}
+                onChange={onManualCode}
               />
               {selected && (
                 <button className="btn" onClick={() => setSelected('')}>
@@ -186,8 +195,7 @@ export default function Dashboard() {
 
           <div className="relative">
             <div className="h-[520px] rounded-xl overflow-hidden border border-gray-700">
-              <ComposableMap projectionConfig={{ scale: 145 }}>
-                {/* grade / lat-long */}
+              <ComposableMap projectionConfig={{ scale: 140 }}>
                 <Graticule stroke="#1f2937" strokeWidth={0.5} />
                 <Geographies geography={geo as any}>
                   {({ geographies }) =>
@@ -197,27 +205,22 @@ export default function Dashboard() {
                       const fill = value > 0 ? scale(value) : '#0f172a';
                       const isSelected = selected === code;
 
-                      const text = `${codeToName[code] || code || '—'} (${code || '?'}) — ${value} caso(s) em ${month}`;
-
                       return (
                         <Geography
                           key={g.rsmKey}
                           geography={g}
-                          onMouseEnter={(e) => setTip({ text, x: e.clientX, y: e.clientY })}
-                          onMouseMove={(e) => setTip({ text, x: e.clientX, y: e.clientY })}
-                          onMouseLeave={() => setTip(null)}
                           onClick={() => code && setSelected(code)}
                           style={{
                             default: {
                               fill,
-                              stroke: isSelected ? '#fbbf24' : '#F59E0B', // contorno mais visível
-                              strokeWidth: isSelected ? 1.5 : 0.6,
+                              stroke: '#fbbf24', // linhas sempre visíveis (amarelo)
+                              strokeWidth: isSelected ? 1.6 : 0.8,
                               outline: 'none',
                               cursor: code ? 'pointer' : 'default',
                             },
                             hover: {
                               fill: code ? '#60a5fa' : fill,
-                              stroke: '#F59E0B',
+                              stroke: '#fbbf24',
                               outline: 'none',
                               cursor: code ? 'pointer' : 'default',
                             },
@@ -234,21 +237,10 @@ export default function Dashboard() {
                 </Geographies>
               </ComposableMap>
             </div>
-
-            {tip && (
-              <div
-                className="pointer-events-none fixed z-50 px-2 py-1 rounded bg-black/80 border border-gray-700 text-xs"
-                style={{ left: tip.x + 12, top: tip.y + 12 }}
-              >
-                {tip.text}
-              </div>
-            )}
           </div>
 
           <div className="mt-4">
-            <div className="text-xs text-gray-400 mb-1">
-              Legenda — intensidade (0 → {maxValue})
-            </div>
+            <div className="text-xs text-gray-400 mb-1">Legenda — intensidade (0 → {maxValue})</div>
             <div className="flex items-center gap-2">
               {['#e0e7ff', '#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5'].map((c, i) => (
                 <div key={i} className="h-3 w-10 rounded" style={{ background: c }} />
@@ -257,27 +249,22 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* PAINEL LATERAL */}
+        {/* PAINEL DIREITO */}
         <div className="card">
           <h2 className="text-lg font-semibold mb-2">Detalhes do país</h2>
-
           <div className="space-y-3">
             <div className="text-xl font-semibold">
-              {codeToName[selected] || selected || '—'}{' '}
+              {(codeToName[selected] || selected || '—')}{' '}
               {selected && <span className="text-gray-500">({selected})</span>}
             </div>
             <div className="text-sm">
               Em <strong>{month}</strong>: <strong>{valueFor(selected)}</strong> casos
             </div>
 
+            {/* Gráfico de linha por mês do país selecionado */}
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={months.map((m) => ({
-                    month: m,
-                    count: Number((byMonth[m] || {})[selected] || 0),
-                  }))}
-                >
+                <LineChart data={series}>
                   <XAxis dataKey="month" stroke="#94a3b8" />
                   <YAxis stroke="#94a3b8" allowDecimals={false} />
                   <Tooltip />
@@ -288,14 +275,13 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Busca de siglas ISO-3 (lista) */}
           <h3 className="font-semibold mt-6 mb-2">Buscar sigla de país (ISO-3)</h3>
+          <div className="mb-4">
+            <CountryCodeLookup onPick={(iso3: string) => setSelected(normalizeCode(iso3))} />
+          </div>
 
-          {/* Busca com lista (usa o componente que você já tem) */}
-          <CountryCodeLookup
-            onPick={(iso3: string) => setSelected(normalizeCode(iso3))}
-            className="mb-4"
-          />
-
+          {/* Fallback: lista do mês atual */}
           <h3 className="font-semibold mt-4 mb-2">Selecione pela lista (fallback)</h3>
           <ul className="text-sm max-h-60 overflow-auto divide-y divide-gray-800">
             {monthData.map((row) => (
@@ -305,10 +291,7 @@ export default function Dashboard() {
                   selected === row.code ? 'text-indigo-300' : ''
                 }`}
               >
-                <button
-                  className="text-left hover:underline"
-                  onClick={() => setSelected(row.code)}
-                >
+                <button className="text-left hover:underline" onClick={() => setSelected(row.code)}>
                   {row.name} <span className="text-gray-500">({row.code})</span>
                 </button>
                 <span className="font-mono">{row.count}</span>
@@ -318,7 +301,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* GRÁFICOS RESUMO */}
+      {/* Quadros inferiores */}
       <section className="grid md:grid-cols-2 gap-6">
         <div className="card">
           <h3 className="font-semibold mb-2">Total Global por Mês</h3>
