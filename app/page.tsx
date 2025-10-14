@@ -65,6 +65,7 @@ export default function Landing() {
 
       {/* ADS-B (se for bloqueado por iframe, aparece o fallback com botão) */}
       <section className="mt-8">
+        <AdsbPanel zoom={3} hideUI resetView provider="adsbdb" />
         <AdsbPanel />
       </section>
     </div>
