@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import NewsForm from './NewsForm';
 
 type NewsItem = {
@@ -9,7 +9,7 @@ type NewsItem = {
   title: string;
   url: string;
   image?: string;
-  summary?: string;
+  summary?: string; // até 1600 (validado no NewsForm/API)
 };
 
 export default function NewsList() {
@@ -17,6 +17,7 @@ export default function NewsList() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [editing, setEditing] = useState<NewsItem | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -42,8 +43,10 @@ export default function NewsList() {
       });
       const json = await r.json();
       if (!r.ok || !json?.ok) throw new Error(json?.msg || `HTTP ${r.status}`);
-      setItems((prev) => prev.filter((x) => x.id !== id));
+      setItems(prev => prev.filter(x => x.id !== id));
       setMsg('Notícia removida.');
+      // dispara refresh para outras áreas que escutam
+      window.dispatchEvent(new CustomEvent('news:refresh'));
     } catch (e: any) {
       setMsg('Erro ao remover: ' + (e?.message || String(e)));
     }
@@ -58,13 +61,27 @@ export default function NewsList() {
 
   return (
     <div className="space-y-6">
-      {/* Formulário com modo edição */}
-      <NewsForm editing={editing} />
+      {/* Formulário (criar/editar) */}
+      <div ref={formRef}>
+        {/* O NewsForm deve aceitar essas props opcionalmente; se não aceitar, ele ignora sem quebrar */}
+        <NewsForm
+          // @ts-expect-error props opcionais (seu NewsForm pode aceitar ou ignorar)
+          editing={editing}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      </div>
 
+      {/* Lista */}
       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Notícias cadastradas</h3>
-          <button className="btn" onClick={load} disabled={loading}>{loading ? 'Atualizando…' : 'Recarregar'}</button>
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? 'Atualizando…' : 'Recarregar'}
+          </button>
         </div>
 
         {items.length === 0 ? (
@@ -76,17 +93,42 @@ export default function NewsList() {
                 <div className="flex-1">
                   <div className="text-xs opacity-70">{n.date}</div>
                   <div className="font-medium">{n.title}</div>
-                  {n.summary && <div className="text-sm opacity-80 mt-1 line-clamp-2">{n.summary}</div>}
-                  <a href={n.url} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-80">
+
+                  {/* Exibição amigável do resumo (até 3 linhas na lista) */}
+                  {n.summary && (
+                    <div
+                      className="text-sm opacity-80 mt-1 line-clamp-3"
+                      title={n.summary}
+                    >
+                      {n.summary}
+                    </div>
+                  )}
+
+                  <a
+                    href={n.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs underline opacity-80 break-all"
+                  >
                     {n.url}
                   </a>
                 </div>
 
                 <div className="flex gap-2">
-                  <button className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-sm" onClick={() => setEditing(n)}>
+                  <button
+                    className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-sm"
+                    onClick={() => {
+                      setEditing(n);
+                      // rola a página para o formulário
+                      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  >
                     Editar
                   </button>
-                  <button className="px-3 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-sm" onClick={() => remove(n.id)}>
+                  <button
+                    className="px-3 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-sm"
+                    onClick={() => remove(n.id)}
+                  >
                     Apagar
                   </button>
                 </div>
