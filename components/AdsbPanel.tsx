@@ -1,66 +1,69 @@
 // components/AdsbPanel.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 
-const IFRAME_URL = 'https://www.adsbdb.com/';
+type Props = {
+  provider?: 'adsbdb' | 'adsbfi' | 'adsblol';
+  zoom?: number;         // 2 a ~12 (depende do provider)
+  lat?: number;          // opcional: se não passar, não fixa centro
+  lon?: number;          // opcional
+  height?: number;       // px
+  hideUI?: boolean;      // esconde sidebar/botões
+  resetView?: boolean;   // força ignorar preferências salvas do usuário
+};
 
-export default function AdsbPanel() {
-  const [state, setState] = useState<'loading'|'ok'|'blocked'>('loading');
-  const timer = useRef<number | undefined>(undefined);
+export default function AdsbPanel({
+  provider = 'adsbdb',
+  zoom = 3,
+  lat,
+  lon,
+  height = 420,
+  hideUI = true,
+  resetView = true,
+}: Props) {
+  // 1) Base do viewer por provedor
+  //    (Se o /globe não abrir no adsbdb, troque para adsblol ou adsbfi abaixo.)
+  const base = useMemo(() => {
+    switch (provider) {
+      case 'adsbfi':  return 'https://globe.adsb.fi';   // tar1090
+      case 'adsblol': return 'https://adsb.lol';        // tar1090
+      default:        return 'https://www.adsbdb.com/globe'; // tar1090 do adsbdb
+    }
+  }, [provider]);
 
-  useEffect(() => {
-    // Se o onLoad não disparar, consideramos bloqueado após 5s
-    timer.current = window.setTimeout(() => setState('blocked'), 5000);
-    return () => { if (timer.current) window.clearTimeout(timer.current); };
-  }, []);
+  // 2) Monta query string do tar1090
+  const params = new URLSearchParams();
+  if (hideUI) {
+    params.set('hideSideBar', '1');
+    params.set('hideButtons', '1');
+  }
+  if (typeof zoom === 'number') params.set('zoom', String(zoom));
+  if (typeof lat === 'number' && typeof lon === 'number') {
+    params.set('lat', String(lat));
+    params.set('lon', String(lon));
+  }
+  if (resetView) params.set('reset', '1'); // limpa preferências salvas e aplica a URL
+
+  // 3) URL final (sem lat/lon => provedor decide centro “global”)
+  const url = `${base}?${params.toString()}`;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-black/20 overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div>
-          <h2 className="text-lg font-semibold">Rastreamento de Voos (ADS-B)</h2>
-          <p className="text-xs opacity-70">Fonte: adsbdb.com</p>
-        </div>
-        <a
-          href={IFRAME_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm"
-        >
-          Abrir em nova aba
-        </a>
-      </header>
-
-      <div className="relative h-[70vh]">
+    <div className="rounded-2xl border border-white/10 overflow-hidden">
+      <div style={{ position: 'relative', height }}>
         <iframe
-          title="ADS-B Live Map"
-          src={IFRAME_URL}
-          className="absolute inset-0 w-full h-full bg-black"
-          loading="lazy"
-          onLoad={() => setState('ok')}
+          title="Mapa ADS-B (tar1090)"
+          src={url}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: '0' }}
+          referrerPolicy="no-referrer"
+          allow="fullscreen"
         />
-        {state !== 'ok' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="text-center space-y-3">
-              <div className="text-sm opacity-80">Carregando…</div>
-              <a
-                href={IFRAME_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm inline-block"
-              >
-                Abrir o mapa em nova aba
-              </a>
-              {state === 'blocked' && (
-                <div className="text-xs opacity-70 max-w-sm mx-auto">
-                  O provedor não permite exibição em iframe (política X-Frame-Options/CSP). Use o botão acima.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
-    </section>
+      <div className="flex items-center justify-end gap-2 p-2 text-xs opacity-75">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="underline">
+          Abrir em aba nova
+        </a>
+      </div>
+    </div>
   );
 }
