@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
-import AdsbLiveMap from '@/components/AdsbLiveMap';
+import AdsbPanel from '@/components/AdsbPanel';
 
 export default function Landing() {
   return (
@@ -20,7 +20,6 @@ export default function Landing() {
               <a href="https://www.youtube.com/@LuzesAbismo" target="_blank" rel="noopener noreferrer" className="btn">▶ YouTube</a>
             </div>
           </div>
-
           <div>
             <div className="max-w-md ml-auto">
               <YouTubeEmbed id="CJEKzSll76g" />
@@ -28,8 +27,6 @@ export default function Landing() {
             <p className="hint mt-2 text-right">Vídeo de apresentação (abre também no YouTube)</p>
           </div>
         </div>
-
-        {/* Glow decorativo */}
         <div className="pointer-events-none absolute -top-24 -right-24 w-80 h-80 rounded-full bg-indigo-600/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-blue-400/10 blur-3xl" />
       </section>
@@ -43,19 +40,16 @@ export default function Landing() {
             <img src="/images/jal1628capanormal.jpeg" alt="Relatórios" />
             <div className="overlay">Relatórios</div>
           </Link>
-
           <Link href="/dashboard" className="tile group h-36 md:h-40 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <span className="shine" />
             <img src="/images/FenomenosUAPHARDCOVER.jpeg" alt="Consolidação" />
             <div className="overlay">Consolidação</div>
           </Link>
-
           <Link href="/news" className="tile group h-36 md:h-40 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <span className="shine" />
             <img src="/images/capaebookuapfé.jpeg" alt="Notícias" />
             <div className="overlay">Notícias</div>
           </Link>
-
           <a
             href="https://www.youtube.com/@LuzesAbismo"
             target="_blank"
@@ -69,14 +63,10 @@ export default function Landing() {
         </div>
       </section>
 
-      // ... dentro do JSX da página (abaixo das seções):
-<section>
-  <h2 className="text-xl font-semibold mb-4">Tráfego aéreo (embutido)</h2>
-  <AdsbLiveMap center={[-30.03, -51.22]} radiusDeg={4} height={420} />
-  <p className="hint mt-2">
-    Fonte: OpenSky Network (gratuito, com limites). Configure <code>OPEN_SKY_USER</code> e <code>OPEN_SKY_PASS</code> no Vercel para aumento de cota.
-  </p>
-</section>
+      {/* Tráfego aéreo (sem iframe) */}
+      <section className="mt-8">
+        <AdsbPanel lat={-30.03} lon={-51.22} zoom={6} />
+      </section>
     </div>
   );
 }
