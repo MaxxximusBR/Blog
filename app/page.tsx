@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
-import AdsbPanel from '@/components/AdsbPanel';
+import AdsbLiveMap from '@/components/AdsbLiveMap';
 
 export default function Landing() {
   return (
@@ -69,11 +69,14 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ADS-B: link externo (globe) com parâmetros na URL */}
-      <section>
-        <h2 className="text-xl font-semibold mb-4">Tráfego aéreo</h2>
-        <AdsbPanel />
-      </section>
+      // ... dentro do JSX da página (abaixo das seções):
+<section>
+  <h2 className="text-xl font-semibold mb-4">Tráfego aéreo (embutido)</h2>
+  <AdsbLiveMap center={[-30.03, -51.22]} radiusDeg={4} height={420} />
+  <p className="hint mt-2">
+    Fonte: OpenSky Network (gratuito, com limites). Configure <code>OPEN_SKY_USER</code> e <code>OPEN_SKY_PASS</code> no Vercel para aumento de cota.
+  </p>
+</section>
     </div>
   );
 }
