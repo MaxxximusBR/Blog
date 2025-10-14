@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react';
 import ReportsList from '@/components/admin/ReportsList';
-import NewsForm from '@/components/admin/NewsForm';
 import NewsList from '@/components/admin/NewsList';
 
 export default function AdminPage() {
@@ -63,7 +62,7 @@ export default function AdminPage() {
         setSummary('');
         setGlobal('');
         if (fileRef.current) fileRef.current.value = '';
-        // avisa listas para atualizarem (seus componentes podem ignorar; não quebra)
+        // avisa listas para atualizarem
         window.dispatchEvent(new CustomEvent('reports:refresh'));
       }
     } catch (e: any) {
@@ -154,14 +153,8 @@ export default function AdminPage() {
       {/* --- Notícias --- */}
       <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
         <h2 className="text-xl font-semibold mb-4">Admin — Notícias</h2>
-
-        {/* Formulário de criação/edição */}
-        <NewsForm />
-
-        {/* Lista com remoção/edição */}
-        <div className="mt-6">
-          <NewsList />
-        </div>
+        {/* NewsList já embute o NewsForm (criar/editar) e a lista com apagar/editar */}
+        <NewsList />
       </section>
     </div>
   );
