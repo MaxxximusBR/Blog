@@ -1,6 +1,7 @@
 
 import Link from 'next/link';
 import YouTubeEmbed from '@/components/YouTubeEmbed';
+import AdsbPanel from '@/components/AdsbPanel';
 
 export default function Landing(){
   return (
@@ -52,6 +53,10 @@ export default function Landing(){
             <span className="shine" />
             <img src="/images/uapsovinisemar2024cover.jpeg" alt="Canal no YouTube" />
             <div className="overlay">YouTube</div>
+            <div className="mt-8">
+  <AdsbPanel />
+</div>
+
           </a>
         </div>
       </section>
