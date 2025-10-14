@@ -1,18 +1,18 @@
+// components/AdsbPanel.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const IFRAME_URL = 'https://www.adsbdb.com/';
 
 export default function AdsbPanel() {
-  const [status, setStatus] = useState<'loading' | 'ok' | 'blocked'>('loading');
+  const [state, setState] = useState<'loading'|'ok'|'blocked'>('loading');
+  const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    // Se em 6s não disparar onLoad, assumimos que o iframe foi bloqueado
-    const t = setTimeout(() => {
-      setStatus((s) => (s === 'loading' ? 'blocked' : s));
-    }, 6000);
-    return () => clearTimeout(t);
+    // Se o onLoad não disparar, consideramos bloqueado após 5s
+    timer.current = window.setTimeout(() => setState('blocked'), 5000);
+    return () => { if (timer.current) window.clearTimeout(timer.current); };
   }, []);
 
   return (
@@ -20,9 +20,7 @@ export default function AdsbPanel() {
       <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <div>
           <h2 className="text-lg font-semibold">Rastreamento de Voos (ADS-B)</h2>
-          <p className="text-xs opacity-70">
-            Fonte: <span className="underline">adsbdb.com</span>
-          </p>
+          <p className="text-xs opacity-70">Fonte: adsbdb.com</p>
         </div>
         <a
           href={IFRAME_URL}
@@ -34,24 +32,18 @@ export default function AdsbPanel() {
         </a>
       </header>
 
-      {/* Área do mapa */}
-      <div className="relative">
-        {/* Iframe (tenta embutir) */}
+      <div className="relative h-[70vh]">
         <iframe
           title="ADS-B Live Map"
           src={IFRAME_URL}
-          className="w-full h-[70vh] bg-black"
+          className="absolute inset-0 w-full h-full bg-black"
           loading="lazy"
-          onLoad={() => setStatus('ok')}
+          onLoad={() => setState('ok')}
         />
-
-        {/* Fallback se o site impedir embed */}
-        {status !== 'ok' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/70 to-black/40 backdrop-blur-sm">
-            <div className="text-center px-6">
-              <div className="text-sm opacity-80 mb-3">
-                O provedor pode bloquear a incorporação em iframe.
-              </div>
+        {state !== 'ok' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="text-center space-y-3">
+              <div className="text-sm opacity-80">Carregando…</div>
               <a
                 href={IFRAME_URL}
                 target="_blank"
@@ -60,6 +52,11 @@ export default function AdsbPanel() {
               >
                 Abrir o mapa em nova aba
               </a>
+              {state === 'blocked' && (
+                <div className="text-xs opacity-70 max-w-sm mx-auto">
+                  O provedor não permite exibição em iframe (política X-Frame-Options/CSP). Use o botão acima.
+                </div>
+              )}
             </div>
           </div>
         )}
