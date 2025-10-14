@@ -1,6 +1,7 @@
 
 import './globals.css';
 import Link from 'next/link';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata = {
   title: 'Anuário OVNIs 2025 / Luzes POA 2022 — Blog',
