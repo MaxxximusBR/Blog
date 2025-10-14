@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { list } from '@vercel/blob';
 
@@ -8,7 +7,6 @@ export const metadata: Metadata = {
   description: 'Atualizações e matérias selecionadas.',
 };
 
-// forçar leitura do índice sempre que carregar
 export const dynamic = 'force-dynamic';
 
 type NewsItem = {
@@ -28,7 +26,6 @@ async function loadNews(): Promise<NewsItem[]> {
     const r = await fetch(it.url, { cache: 'no-store' });
     if (!r.ok) return [];
     const items = (await r.json()) as NewsItem[];
-    // ordenar: data desc + id desc
     return items.slice().sort((a, b) =>
       a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? 1 : -1
     );
@@ -42,20 +39,17 @@ export default async function NewsPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* Hero com metade direita usando o GIF de breaking news */}
-      <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg">
+      {/* HERO: metade esquerda texto, metade direita GIF */}
+      <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg min-h-[150px]">
         <div className="relative z-10">
           <h1 className="text-2xl font-semibold">Notícias</h1>
           <p className="opacity-75">Atualizações e matérias selecionadas.</p>
         </div>
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 opacity-60">
-          <Image
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2">
+          <img
             src="/media/brknews.gif"
             alt=""
-            fill
-            className="object-contain object-right"
-            unoptimized
-            priority
+            className="w-full h-full object-contain object-right opacity-70 select-none"
           />
         </div>
       </section>
@@ -67,14 +61,12 @@ export default async function NewsPage() {
           {items.map((n) => (
             <article key={n.id} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col">
               <div className="flex items-start gap-2 mb-2">
-                {/* logotipo “breaking news” ~30% maior */}
-                <Image
+                <img
                   src="/media/brknews.gif"
                   alt="Breaking News"
                   width={32}
                   height={32}
                   className="mt-0.5 shrink-0"
-                  unoptimized
                 />
                 <Link
                   href={n.url}
@@ -99,7 +91,7 @@ export default async function NewsPage() {
                 />
               )}
 
-              {/* RESUMO COMPLETO — sem line-clamp */}
+              {/* RESUMO COMPLETO — sem truncar */}
               {n.summary && (
                 <p className="text-sm opacity-90 mt-3 whitespace-pre-wrap break-words">
                   {n.summary}
