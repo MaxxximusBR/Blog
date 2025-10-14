@@ -64,7 +64,7 @@ export default async function NoticiasPage() {
                   <img
                     src="/media/brknews.gif"
                     alt="Notícia"
-                    width={65}
+                    width={95}
                     height={24}
                     className="h-[18px] w-[18px] mt-0.5 rounded-sm ring-1 ring-white/10 shadow-sm"
                     loading="lazy"
