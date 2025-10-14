@@ -1,8 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-export default function NewsForm() {
+type NewsItem = {
+  id: string;
+  date: string;   // YYYY-MM-DD
+  title: string;
+  url: string;    // http(s)://
+  image?: string;
+  summary?: string; // até 1600
+};
+
+type Props = {
+  editing?: NewsItem | null;              // item a editar (opcional)
+  onSaved?: () => void;                    // callback após salvar
+  onCancel?: () => void;                   // callback ao cancelar edição
+};
+
+export default function NewsForm({ editing = null, onSaved, onCancel }: Props) {
   const [date, setDate] = useState('');
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
@@ -11,73 +26,101 @@ export default function NewsForm() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const MAX_SUM = 1600;
+  // carrega dados quando entrar em modo edição
+  useEffect(() => {
+    if (editing) {
+      setDate(editing.date || '');
+      setTitle(editing.title || '');
+      setUrl(editing.url || '');
+      setImage(editing.image || '');
+      setSummary(editing.summary || '');
+      setMsg('Editando notícia existente.');
+    } else {
+      clearForm();
+    }
+  }, [editing]);
 
-  async function onSubmit() {
-    setMsg('Validando...');
-    const dOk = /^\d{4}-\d{2}-\d{2}$/.test(date.trim());
-    if (!dOk) return setMsg('Data inválida. Use AAAA-MM-DD.');
-    if (!title.trim()) return setMsg('Informe o título.');
-    if (!/^https?:\/\//i.test(url.trim())) return setMsg('URL externa inválida (deve começar com http/https).');
-    if (summary && summary.length > MAX_SUM) return setMsg(`Resumo muito longo (máx. ${MAX_SUM} caracteres).`);
+  function clearForm() {
+    setDate('');
+    setTitle('');
+    setUrl('');
+    setImage('');
+    setSummary('');
+    setMsg('');
+  }
+
+  async function handleSubmit() {
+    setMsg('Validando…');
+
+    if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date.trim())) {
+      setMsg('Data inválida. Use AAAA-MM-DD.');
+      return;
+    }
+    if (!title.trim()) {
+      setMsg('Informe o título.');
+      return;
+    }
+    if (!/^https?:\/\//i.test(url.trim())) {
+      setMsg('URL inválida. Deve começar com http:// ou https://');
+      return;
+    }
+    if (summary && summary.length > 1600) {
+      setMsg(`Resumo muito longo (${summary.length}). Máximo permitido: 1600 caracteres.`);
+      return;
+    }
 
     setBusy(true);
     try {
-      const res = await fetch('/api/admin/news/save', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          date: date.trim(),
-          title: title.trim(),
-          url: url.trim(),
-          image: image.trim() || undefined,
-          summary: summary.trim() || undefined,
-        }),
-      });
+      const payload: any = {
+        date: date.trim(),
+        title: title.trim(),
+        url: url.trim(),
+        image: image.trim() || undefined,
+        summary: summary.trim() || undefined,
+      };
+      // se estiver editando, envia o id para atualizar
+      if (editing?.id) payload.id = editing.id;
 
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg(json?.msg || `Erro ${res.status}`);
-        return;
+      const r = await fetch('/api/admin/news/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await r.json().catch(() => ({} as any));
+      if (!r.ok || !json?.ok) {
+        throw new Error(json?.msg || `HTTP ${r.status}`);
       }
 
-      setMsg('OK: notícia publicada.');
-      // limpa campos
-      setTitle('');
-      setUrl('');
-      setImage('');
-      setSummary('');
-      // avisa a lista para recarregar (se existir listener)
+      setMsg('OK: Notícia salva com sucesso.');
+      // dispara evento para listas recarregarem
       window.dispatchEvent(new CustomEvent('news:refresh'));
+      // se tiver callback de sucesso, chama
+      onSaved?.();
+      // limpa o form se for criação; se for edição, mantém preenchido
+      if (!editing) clearForm();
     } catch (e: any) {
-      setMsg('Falha de rede: ' + (e?.message || String(e)));
+      setMsg('Erro ao salvar: ' + (e?.message || String(e)));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">
-      <div className="grid md:grid-cols-2 gap-4">
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3">
+      <h3 className="font-semibold">{editing ? 'Editar notícia' : 'Nova notícia'}</h3>
+
+      <div className="grid md:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm mb-1">Data (AAAA-MM-DD)</label>
           <input
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            placeholder="2025-10-14"
+            placeholder="2025-10-13"
             className="w-full border rounded px-3 py-2 bg-black/10"
           />
         </div>
+
         <div>
-          <label className="block text-sm mb-1">URL da matéria</label>
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://exemplo.com/materia"
-            className="w-full border rounded px-3 py-2 bg-black/10"
-          />
-        </div>
-        <div className="md:col-span-2">
           <label className="block text-sm mb-1">Título</label>
           <input
             value={title}
@@ -86,7 +129,18 @@ export default function NewsForm() {
             className="w-full border rounded px-3 py-2 bg-black/10"
           />
         </div>
-        <div className="md:col-span-2">
+
+        <div>
+          <label className="block text-sm mb-1">URL da notícia</label>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://exemplo.com/materia"
+            className="w-full border rounded px-3 py-2 bg-black/10"
+          />
+        </div>
+
+        <div>
           <label className="block text-sm mb-1">Imagem (opcional)</label>
           <input
             value={image}
@@ -94,35 +148,49 @@ export default function NewsForm() {
             placeholder="https://exemplo.com/imagem.jpg"
             className="w-full border rounded px-3 py-2 bg-black/10"
           />
-          <p className="text-xs opacity-70 mt-1">Se não tiver, deixe em branco.</p>
         </div>
 
         <div className="md:col-span-2">
-          <label className="block text-sm mb-1">Resumo (opcional) — até {MAX_SUM} caracteres</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm mb-1">Resumo (opcional, até 1600)</label>
+            <span className="text-xs opacity-60">{summary.length}/1600</span>
+          </div>
           <textarea
             value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            maxLength={MAX_SUM}
-            rows={6}
-            placeholder="Escreva um resumo da notícia (aparece na listagem)."
+            onChange={(e) => setSummary(e.target.value.slice(0, 1600))}
+            placeholder="Escreva um resumo curto da notícia…"
+            rows={5}
             className="w-full border rounded px-3 py-2 bg-black/10"
           />
-          <div className="text-right text-xs opacity-70 mt-1">
-            {summary.length}/{MAX_SUM}
-          </div>
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={busy}
-        className="px-4 py-2 rounded bg-white/10 hover:bg-white/20"
-      >
-        {busy ? 'Publicando…' : 'Publicar notícia'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="px-4 py-2 rounded bg-white/10 hover:bg-white/20"
+          onClick={handleSubmit}
+          disabled={busy}
+        >
+          {busy ? 'Salvando…' : (editing ? 'Salvar alterações' : 'Publicar notícia')}
+        </button>
 
-      {msg && <p className="text-sm mt-2">{msg}</p>}
+        {editing && (
+          <button
+            type="button"
+            className="px-4 py-2 rounded bg-white/5 hover:bg-white/10"
+            onClick={() => {
+              clearForm();
+              onCancel?.();
+            }}
+            disabled={busy}
+          >
+            Cancelar edição
+          </button>
+        )}
+      </div>
+
+      {!!msg && <div className="text-sm opacity-80">{msg}</div>}
     </div>
   );
 }
