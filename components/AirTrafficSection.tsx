@@ -60,16 +60,37 @@ export default function AdsbPanel({
         <a href={fr24Poa} target="_blank" rel="noopener noreferrer" className="btn">FlightRadar24 — POA</a>
       </div>
 
-      {/* Aviso de dados */}
-      <div className="grid md:grid-cols-2 gap-3">
-        <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
-          <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver
-          camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
-        </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs opacity-80">
-          Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
-        </div>
-      </div>
+    {/* Aviso de dados */}
+<div className="grid md:grid-cols-2 gap-3">
+  <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+    <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver
+    camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
+  </div>
+
+  {/* Card de aviso com banner animado acima do texto */}
+  <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
+    {/* Banner animado (elegante, horizontal) */}
+    <div className="rounded-lg overflow-hidden border border-white/10 mb-2 bg-black/40">
+      <video
+        className="w-full h-20 md:h-24 object-cover"
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        aria-label="Animação de radar de tráfego aéreo"
+      >
+        <source src="/media/traffic-radar.webm" type="video/webm" />
+        {/* Opcional: adicione um MP4 aqui como fallback se tiver */}
+        {/* <source src="/media/traffic-radar.mp4" type="video/mp4" /> */}
+      </video>
+    </div>
+
+    <p className="opacity-80">
+      Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
+    </p>
+  </div>
+</div>
 
       {/* Live ATC — só renderiza player se houver stream autorizado */}
       <div className="mt-4 grid gap-3 md:grid-cols-2">
