@@ -1,84 +1,96 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+type Country = { name: string; iso3: string };
 type Props = {
-  onPick: (iso3: string) => void;
-  className?: string; // <- NOVO
+  onPick?: (iso3: string) => void;
+  className?: string;
+  placeholder?: string;
 };
 
-// Lista ISO-3 básica (pode ampliar à vontade)
-const COUNTRIES: { code: string; name: string }[] = [
-  { code: 'AFG', name: 'Afeganistão' },
-  { code: 'AGO', name: 'Angola' },
-  { code: 'ALB', name: 'Albânia' },
-  { code: 'DEU', name: 'Alemanha' },
-  { code: 'AND', name: 'Andorra' },
-  { code: 'ARE', name: 'Emirados Árabes Unidos' },
-  { code: 'ARG', name: 'Argentina' },
-  { code: 'AUS', name: 'Austrália' },
-  { code: 'BRA', name: 'Brasil' },
-  { code: 'CAN', name: 'Canadá' },
-  { code: 'CHL', name: 'Chile' },
-  { code: 'CHN', name: 'China' },
-  { code: 'COL', name: 'Colômbia' },
-  { code: 'DNK', name: 'Dinamarca' },
-  { code: 'ESP', name: 'Espanha' },
-  { code: 'FRA', name: 'França' },
-  { code: 'GBR', name: 'Reino Unido' },
-  { code: 'ITA', name: 'Itália' },
-  { code: 'JPN', name: 'Japão' },
-  { code: 'MEX', name: 'México' },
-  { code: 'PER', name: 'Peru' },
-  { code: 'PRT', name: 'Portugal' },
-  { code: 'RUS', name: 'Rússia' },
-  { code: 'USA', name: 'Estados Unidos' },
-  // ...adicione mais conforme precisar
-];
-
-export default function CountryCodeLookup({ onPick, className }: Props) {
+export default function CountryCodeLookup({
+  onPick,
+  className = '',
+  placeholder = 'Buscar país ou sigla (ex.: BRA, Brasil)',
+}: Props) {
+  const [all, setAll] = useState<Country[]>([]);
   const [q, setQ] = useState('');
+  const [err, setErr] = useState<string>('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // world-countries: tem campo name.common e cca3 (ISO-3)
+        const url = 'https://cdn.jsdelivr.net/npm/world-countries@latest/countries.json';
+        const r = await fetch(url, { cache: 'force-cache' });
+        const json = await r.json();
+        const parsed: Country[] = (json || []).map((c: any) => ({
+          name: c?.name?.common || c?.name || c?.cca3 || '',
+          iso3: (c?.cca3 || '').toUpperCase(),
+        })).filter((x: Country) => x.iso3 && x.name);
+
+        if (alive) setAll(parsed.sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (e: any) {
+        if (!alive) return;
+        setErr('Falha ao carregar lista completa; usando fallback reduzido.');
+        // Fallback mínimo (caso CDN bloqueie)
+        setAll([
+          { name: 'Brazil', iso3: 'BRA' },
+          { name: 'United States', iso3: 'USA' },
+          { name: 'Argentina', iso3: 'ARG' },
+          { name: 'Chile', iso3: 'CHL' },
+          { name: 'Uruguay', iso3: 'URY' },
+          { name: 'Paraguay', iso3: 'PRY' },
+          { name: 'Canada', iso3: 'CAN' },
+          { name: 'France', iso3: 'FRA' },
+          { name: 'Germany', iso3: 'DEU' },
+          { name: 'Japan', iso3: 'JPN' },
+        ]);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    if (!term) return COUNTRIES;
-    return COUNTRIES.filter(
-      (c) =>
-        c.code.toLowerCase().includes(term) ||
-        c.name.toLowerCase().includes(term)
+    if (!q.trim()) return all.slice(0, 200); // limita render
+    const s = q.trim().toLowerCase();
+    return all.filter(c =>
+      c.name.toLowerCase().includes(s) || c.iso3.toLowerCase().includes(s)
     );
-  }, [q]);
-
-  function choose(code: string) {
-    onPick(code.toUpperCase());
-    setQ('');
-  }
+  }, [q, all]);
 
   return (
     <div className={className}>
-      <label className="text-sm block mb-2">Buscar sigla de país (ISO-3)</label>
+      <label className="block text-sm opacity-80 mb-2">Buscar sigla de país (ISO-3)</label>
+
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Buscar país ou sigla (ex.: BRA, Brasil)"
-        className="w-full bg-black/40 border border-gray-700 rounded px-3 py-2 mb-2"
+        placeholder={placeholder}
+        className="w-full px-3 py-2 rounded bg-black/20 border border-white/10 outline-none"
+        inputMode="search"
       />
 
-      <div className="max-h-64 overflow-auto rounded border border-gray-800 divide-y divide-gray-800">
-        {filtered.map((c) => (
-          <button
-            key={c.code}
-            type="button"
-            onClick={() => choose(c.code)}
-            className="w-full text-left px-3 py-2 hover:bg-white/5 flex items-center justify-between"
-          >
-            <span>{c.name}</span>
-            <span className="text-xs text-gray-400">{c.code}</span>
-          </button>
-        ))}
-        {filtered.length === 0 && (
-          <div className="px-3 py-2 text-sm text-gray-400">Nada encontrado.</div>
-        )}
+      {err && <div className="mt-2 text-xs opacity-70">{err}</div>}
+
+      <div className="mt-3 max-h-72 overflow-auto rounded border border-white/10">
+        <ul className="divide-y divide-white/10">
+          {filtered.map((c) => (
+            <li
+              key={c.iso3}
+              className="flex items-center justify-between px-3 py-2 hover:bg-white/5 cursor-pointer"
+              onClick={() => onPick?.(c.iso3)}
+            >
+              <span>{c.name}</span>
+              <span className="text-xs opacity-70">{c.iso3}</span>
+            </li>
+          ))}
+          {filtered.length === 0 && (
+            <li className="px-3 py-2 text-sm opacity-70">Nenhum país encontrado.</li>
+          )}
+        </ul>
       </div>
     </div>
   );
