@@ -174,6 +174,179 @@ export default function Dashboard(){
                 <Bar dataKey="count" fill="#93c5fd" />
               </BarChart>
             </ResponsiveContainer>
+            // --- MINI-COMPONENTES PARA O RODAPÉ DO MAPA -------------------------------
+            {/* ===== RODAPÉ DO MAPA: regiões, variação e relatórios ===== */}
+{(() => {
+  // pegue o mês atual do seu estado/controle
+  const monthKey = month; // ex.: '2025-08'
+  const cur: Record<string, number> = (byMonth?.[monthKey] ?? {}) as any;
+
+  // mês anterior
+  const prevKey = (() => {
+    const [y,m] = monthKey.split('-').map(Number);
+    const d = new Date(y, (m||1)-2, 1); // -1 mês => índice base 0
+    const yy = d.getFullYear();
+    const mm = (d.getMonth()+1).toString().padStart(2,'0');
+    return `${yy}-${mm}`;
+  })();
+  const prev: Record<string, number> = (byMonth?.[prevKey] ?? {}) as any;
+
+  const nameOf = (iso3: string) => (COUNTRY_NAMES?.[iso3] ?? iso3);
+
+  return (
+    <div className="mt-6 grid gap-4 xl:grid-cols-3">
+      <RegionBreakdown cur={cur} />
+      <MonthDelta cur={cur} prev={prev} nameOf={nameOf} monthKey={monthKey} prevKey={prevKey} />
+      <MonthReports monthKey={monthKey} />
+    </div>
+  );
+})()}
+
+function MonthReports({ monthKey }: { monthKey: string }) {
+  const [items, setItems] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    let ok = true;
+    fetch('/api/reports', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((all) => { if (ok) setItems(Array.isArray(all) ? all : []); })
+      .catch(() => {});
+    return () => { ok = false; };
+  }, []);
+  const list = items.filter((x) => x?.slug === monthKey);
+
+  if (list.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <h3 className="text-lg font-semibold mb-2">Relatório(s) do mês</h3>
+      <ul className="space-y-2">
+        {list.map((r:any) => (
+          <li key={r.slug} className="flex items-center justify-between gap-2">
+            <div>
+              <div className="font-medium">{r.title || `Relatório ${r.slug}`}</div>
+              {r.summary && <div className="text-sm opacity-80 line-clamp-2">{r.summary}</div>}
+            </div>
+            <div className="shrink-0 flex gap-2">
+              <a href={`/report/${r.slug}`} className="btn">Abrir</a>
+              <a href={r.file} target="_blank" rel="noopener" className="btn">PDF</a>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RegionBreakdown({ cur }: { cur: Record<string, number> }) {
+  const [regions, setRegions] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const url = 'https://cdn.jsdelivr.net/npm/world-countries@latest/countries.json';
+        const r = await fetch(url, { cache: 'force-cache' });
+        const j = await r.json();
+        const map: Record<string, string> = {};
+        for (const c of j || []) {
+          const iso3 = (c?.cca3 || '').toUpperCase();
+          const reg  = c?.region || 'Outros';
+          if (iso3) map[iso3] = reg;
+        }
+        if (alive) setRegions(map);
+      } catch { /* silencioso */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const totals: Record<string, number> = {};
+  let totalAll = 0;
+  for (const [iso3, v] of Object.entries(cur || {})) {
+    const n = Number(v || 0);
+    if (!n) continue;
+    const reg = regions[iso3] || 'Outros';
+    totals[reg] = (totals[reg] || 0) + n;
+    totalAll += n;
+  }
+  const rows = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  if (rows.length === 0) return null;
+
+  const max = Math.max(1, ...rows.map(([,v])=>v));
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <h3 className="text-lg font-semibold mb-3">Participação por região</h3>
+      <ul className="space-y-2">
+        {rows.map(([reg, v]) => {
+          const pct = totalAll ? (v/totalAll*100) : 0;
+          return (
+            <li key={reg} className="flex items-center gap-3">
+              <div className="min-w-[7.5rem]">{reg}</div>
+              <div className="flex-1 h-2 rounded bg-white/10 overflow-hidden">
+                <div className="h-full bg-blue-400/70" style={{ width: `${(v/max)*100}%` }} />
+              </div>
+              <div className="w-28 text-right tabular-nums text-sm">
+                {v} <span className="opacity-70">({pct.toFixed(0)}%)</span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function MonthDelta({
+  cur,
+  prev,
+  nameOf,
+  monthKey,
+  prevKey,
+}: {
+  cur: Record<string, number>;
+  prev: Record<string, number>;
+  nameOf: (iso3: string) => string;
+  monthKey: string;
+  prevKey: string;
+}) {
+  const union = new Set<string>([...Object.keys(cur||{}), ...Object.keys(prev||{})]);
+  const diffs = Array.from(union).map((k) => ({ iso3: k, diff: (cur[k]||0)-(prev[k]||0), now: cur[k]||0 }));
+  const up   = diffs.filter(d=>d.diff>0).sort((a,b)=>b.diff-a.diff).slice(0,5);
+  const down = diffs.filter(d=>d.diff<0).sort((a,b)=>a.diff-b.diff).slice(0,5);
+
+  if (up.length===0 && down.length===0) return null;
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <h3 className="text-lg font-semibold mb-3">Variação vs mês anterior</h3>
+      <div className="text-xs opacity-70 mb-2">{prevKey} → {monthKey}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div className="font-medium mb-1">Maiores altas</div>
+          <ul className="space-y-1">
+            {up.length===0 ? <li className="opacity-70 text-sm">—</li> : up.map(x=>(
+              <li key={x.iso3} className="flex justify-between">
+                <span>{nameOf(x.iso3)}</span>
+                <span className="tabular-nums text-emerald-400">+{x.diff} <span className="opacity-70">({x.now})</span></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="font-medium mb-1">Maiores quedas</div>
+          <ul className="space-y-1">
+            {down.length===0 ? <li className="opacity-70 text-sm">—</li> : down.map(x=>(
+              <li key={x.iso3} className="flex justify-between">
+                <span>{nameOf(x.iso3)}</span>
+                <span className="tabular-nums text-rose-400">{x.diff} <span className="opacity-70">({x.now})</span></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+// ---------------------------------------------------------------------------
+
           </div>
         </aside>
       </section>
