@@ -37,7 +37,9 @@
       style={{ display: 'none' }}
       loading="eager"
     />
-
+<div className="mt-4">
+  <img src="/media/radar.gif?v=10" alt="teste" style={{ width: 200, height: 'auto' }} />
+</div>
     {/* Links de diagnóstico (sempre visíveis) */}
     <div className="text-xs opacity-80">
       <div className="mb-1">Diagnóstico:</div>
