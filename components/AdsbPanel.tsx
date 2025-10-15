@@ -1,61 +1,57 @@
 'use client';
 
-import { useState } from 'react';
-
 type Props = {
   lat?: number;
   lon?: number;
   zoom?: number;
-  gifSizePx?: number; // tamanho do gif no cabeçalho
+  /** Tamanho do vídeo/ícone animado no cabeçalho (px) */
+  gifSizePx?: number;
 };
 
 export default function AdsbPanel({
   lat = -30.03,
   lon = -51.22,
   zoom = 6,
-  gifSizePx = 56, // ~30% maior que um ícone padrão
+  gifSizePx = 56, // ~30% maior que um ícone/avatazinho
 }: Props) {
   const adsbfi = `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`;
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  // bust de cache para garantir que o gif novo apareça no Vercel/CDN
-  const gifSrc = `/media/radar.gif?v=3`;
-  const [gifOk, setGifOk] = useState(true);
-
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
-      {/* Cabeçalho: título | GIF | botão */}
+      {/* Cabeçalho: título | vídeo animado | botão */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <div className="min-w-0">
           <h3 className="text-xl font-semibold">Tráfego aéreo em tempo real</h3>
           <p className="hint">Abra o mapa interativo em nova aba (fonte: ADSB.fi / tar1090).</p>
         </div>
 
-        {/* GIF no centro do cabeçalho */}
+        {/* Animação: usa .webm (leve); se falhar, cai para um GIF (opcional) */}
         <div className="shrink-0">
-          {gifOk ? (
+          <video
+            width={gifSizePx}
+            height={gifSizePx}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            className="rounded-full ring-1 ring-white/10 shadow-lg opacity-95 object-cover"
+            aria-label="Radar animado"
+            poster="/media/airtraffic.jpg"
+            style={{ width: gifSizePx, height: gifSizePx }}
+          >
+            <source src="/media/radar.webm?v=1" type="video/webm" />
+            {/* fallback (opcional): se tiver um GIF menor otimizado */}
             <img
-              src={gifSrc}
+              src="/media/radar.gif?v=3"
               alt="Radar animado"
               width={gifSizePx}
               height={gifSizePx}
               loading="eager"
-              onError={() => setGifOk(false)}
-              className="rounded-full ring-1 ring-white/10 shadow-lg opacity-95"
-              style={{ objectFit: 'cover' }}
             />
-          ) : (
-            <a
-              href={gifSrc}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30"
-              title="Clique para testar se /media/radar.gif está disponível no deploy"
-            >
-              GIF não encontrado — testar
-            </a>
-          )}
+          </video>
         </div>
 
         <div className="shrink-0">
