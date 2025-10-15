@@ -53,45 +53,7 @@ function prevOf(monthKey: string){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
-// ---------- mini-cards do rodapé ----------
-function MonthReports({ monthKey }: { monthKey: string }) {
-  const [items, setItems] = React.useState<any[]>([]);
-  React.useEffect(()=>{
-    let ok = true;
-    fetch('/api/reports', { cache:'no-store' })
-      .then(r=>r.json())
-      .then((all)=>{ if(ok) setItems(Array.isArray(all)?all:[]); })
-      .catch(()=>{});
-    return ()=>{ ok=false; };
-  },[]);
-  const list = items.filter((x)=> x?.slug === monthKey);
-  if(list.length===0) return null;
-
-  return (
-    <section className="rounded-2xl border border-white/10 bg-black/20 p-4 h-full">
-      <h3 className="text-lg font-semibold mb-2">Relatório(s) do mês</h3>
-      <ul className="space-y-2">
-        {list.map((r:any)=>(
-          <li key={r.slug} className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="font-medium truncate">{r.title || `Relatório ${r.slug}`}</div>
-              {r.summary && (
-                <div className="text-sm opacity-80 max-h-14 overflow-hidden text-ellipsis">
-                  {r.summary}
-                </div>
-              )}
-            </div>
-            <div className="shrink-0 ml-auto flex flex-wrap gap-2">
-              <a href={`/report/${r.slug}`} className="btn">Abrir</a>
-              <a href={r.file} target="_blank" rel="noopener" className="btn">PDF</a>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
+// ---------- mini-cards do rodapé (apenas 2) ----------
 function RegionBreakdown({ cur }: { cur: Record<string, number> }) {
   const [regions, setRegions] = React.useState<Record<string,string>>({});
   React.useEffect(()=>{
@@ -198,12 +160,19 @@ function DashboardFooter({
   prev:Record<string,number>;
   nameOf:(iso3:string)=>string;
 }){
-  // Layout robusto: 1 col → 2 col em md → 3 col em 2xl; cards sempre com a mesma altura
+  // Agora apenas 2 cards — responsivo: 1 coluna → 2 colunas
   return (
     <div className="mt-6 -mx-2 flex flex-wrap items-stretch">
-      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><RegionBreakdown cur={cur}/></div>
-      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><MonthDelta cur={cur} prev={prev} nameOf={nameOf} monthKey={monthKey} prevKey={prevOf(monthKey)} /></div>
-      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><MonthReports monthKey={monthKey}/></div>
+      <div className="w-full md:w-1/2 px-2 mb-4"><RegionBreakdown cur={cur}/></div>
+      <div className="w-full md:w-1/2 px-2 mb-4">
+        <MonthDelta
+          cur={cur}
+          prev={prev}
+          nameOf={nameOf}
+          monthKey={monthKey}
+          prevKey={prevOf(monthKey)}
+        />
+      </div>
     </div>
   );
 }
@@ -305,7 +274,7 @@ export default function Dashboard(){
             <div className="flex items-center gap-2">{COLOR_RAMP.map((c,i)=> <div key={i} className="h-3 w-10 rounded" style={{ background:c }} />)}</div>
           </div>
 
-          {/* cards extras do rodapé */}
+          {/* rodapé com 2 cards */}
           <DashboardFooter
             monthKey={month}
             cur={(byMonth?.[month] as Record<string,number>) || {}}
@@ -360,4 +329,3 @@ export default function Dashboard(){
 .card => rounded-2xl bg-[#0e1624] p-5 shadow-lg
 .btn  => px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm
 .hint => opacity-75
-*/
