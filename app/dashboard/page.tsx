@@ -12,7 +12,6 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar,
 } from 'recharts';
 
-// ---------- Tipos & constantes ----------
 type CountryData = { code: string; name: string; count: number };
 
 const codeToName: Record<string, string> = {
@@ -36,9 +35,13 @@ const MAP_OUTLINE = '#1c2a44';
 const MAP_OUTLINE_HL = '#fbbf24';
 const FILL_ZERO = '#112036';
 
-// ---------- utils ----------
-const normalizeMonth = (m: string) => m.replace(/(\d{4})-(\d{1,2})/, (_, y, mm) => `${y}-${String(mm).padStart(2,'0')}`);
-const normalizeCode = (raw: string) => { const t = String(raw||'').trim().toUpperCase(); return t ? (ALIASES[t] || t) : ''; };
+const normalizeMonth = (m: string) =>
+  m.replace(/(\d{4})-(\d{1,2})/, (_, y, mm) => `${y}-${String(mm).padStart(2,'0')}`);
+
+const normalizeCode = (raw: string) => {
+  const t = String(raw||'').trim().toUpperCase();
+  return t ? (ALIASES[t] || t) : '';
+};
 
 function getISO3fromGeo(geo:any):string{
   const num = Number(geo.id);
@@ -47,21 +50,24 @@ function getISO3fromGeo(geo:any):string{
   if(a3 && a3 !== '-99') return String(a3).toUpperCase();
   return '';
 }
+
 function prevOf(monthKey: string){
   const [y,m]=monthKey.split('-').map(Number);
   const d=new Date(y,(m||1)-2,1);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
-// ---------- mini-cards do rodapé (apenas 2) ----------
+/* ===================== MINI-CARDS DO RODAPÉ (2) ===================== */
+
 function RegionBreakdown({ cur }: { cur: Record<string, number> }) {
   const [regions, setRegions] = React.useState<Record<string,string>>({});
+
   React.useEffect(()=>{
     let alive=true;
     (async()=>{
       try{
-        const r=await fetch('https://cdn.jsdelivr.net/npm/world-countries@latest/countries.json',{cache:'force-cache'});
-        const j=await r.json();
+        const r = await fetch('https://cdn.jsdelivr.net/npm/world-countries@latest/countries.json',{cache:'force-cache'});
+        const j = await r.json();
         const map: Record<string,string> = {};
         for(const c of j||[]){
           const iso3 = String(c?.cca3||'').toUpperCase();
@@ -73,6 +79,7 @@ function RegionBreakdown({ cur }: { cur: Record<string, number> }) {
     })();
     return ()=>{alive=false;};
   },[]);
+
   const totals: Record<string,number> = {};
   let sum=0;
   for(const [k,v] of Object.entries(cur||{})){
@@ -81,6 +88,7 @@ function RegionBreakdown({ cur }: { cur: Record<string, number> }) {
     totals[reg]=(totals[reg]||0)+n;
     sum+=n;
   }
+
   const rows = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
   if(rows.length===0) return null;
   const max = Math.max(1,...rows.map(([,v])=>v));
@@ -160,7 +168,6 @@ function DashboardFooter({
   prev:Record<string,number>;
   nameOf:(iso3:string)=>string;
 }){
-  // Agora apenas 2 cards — responsivo: 1 coluna → 2 colunas
   return (
     <div className="mt-6 -mx-2 flex flex-wrap items-stretch">
       <div className="w-full md:w-1/2 px-2 mb-4"><RegionBreakdown cur={cur}/></div>
@@ -177,7 +184,8 @@ function DashboardFooter({
   );
 }
 
-// ---------- Página ----------
+/* ===================== PÁGINA ===================== */
+
 export default function Dashboard(){
   const geo = useMemo(()=> topojson.feature(worldData as any, (worldData as any).objects.countries) as any, []);
 
@@ -208,26 +216,30 @@ export default function Dashboard(){
 
   return (
     <main className="max-w-7xl mx-auto p-6 space-y-8">
-      {/* header */}
       <section className="relative rounded-2xl bg-[#0e1624] px-6 py-5 shadow-lg overflow-hidden">
         <h1 className="text-2xl font-semibold">Consolidação Global — <span className="text-xs align-middle">Dashboard V9b (OFFLINE+secure)</span></h1>
         <p className="hint">Passe o mouse para ver valores; clique para fixar um país. A busca de siglas está ao lado.</p>
-        <div className="text-xs mt-2">Diag — mês: <code>{month}</code> | BRA: <span className="font-mono">{valueFor('BRA')}</span> | Selecionado: <code>{selected || '—'}</code> (valor: <span className="font-mono">{valueFor(selected)}</span>)</div>
+        <div className="text-xs mt-2">
+          Diag — mês: <code>{month}</code> | BRA: <span className="font-mono">{valueFor('BRA')}</span> | Selecionado: <code>{selected || '—'}</code> (valor: <span className="font-mono">{valueFor(selected)}</span>)
+        </div>
         <div className="pointer-events-none absolute right-6 top-4 z-10 opacity-90 hidden md:block">
           <Image src="/media/earth-night-1918_128.gif" alt="" width={128} height={128} priority className="rounded-full ring-1 ring-white/10 shadow-lg" />
         </div>
       </section>
 
-      {/* grade principal */}
       <section className="grid lg:grid-cols-3 gap-6 items-start">
-        {/* coluna esquerda */}
         <div className="lg:col-span-2 card min-w-0 overflow-x-hidden pb-5">
           <div className="flex items-center gap-3 mb-3">
             <label className="hint">Mês:</label>
             <select className="bg-black/40 border border-gray-700 rounded px-3 py-1" value={month} onChange={(e)=> setMonth(normalizeMonth(e.target.value))}>
               {months.map(m=> <option key={m} value={m}>{m}</option>)}
             </select>
-            <input placeholder="Código do país (ex.: BRA)" className="bg-black/40 border border-gray-700 rounded px-3 py-1 w-56" value={selected} onChange={(e)=> setSelected(normalizeCode(e.target.value))} />
+            <input
+              placeholder="Código do país (ex.: BRA)"
+              className="bg-black/40 border border-gray-700 rounded px-3 py-1 w-56"
+              value={selected}
+              onChange={(e)=> setSelected(normalizeCode(e.target.value))}
+            />
             <button className="btn" onClick={()=> setSelected('')}>Limpar</button>
           </div>
 
@@ -263,7 +275,10 @@ export default function Dashboard(){
             </div>
 
             {tip && (
-              <div className="pointer-events-none fixed z-50 px-2 py-1 rounded bg-black/80 border border-gray-700 text-xs" style={{ left: tip.x + 12, top: tip.y + 12 }}>
+              <div
+                className="pointer-events-none fixed z-50 px-2 py-1 rounded bg-black/80 border border-gray-700 text-xs"
+                style={{ left: tip.x + 12, top: tip.y + 12 }}
+              >
                 {tip.text}
               </div>
             )}
@@ -271,10 +286,11 @@ export default function Dashboard(){
 
           <div className="mt-4">
             <div className="text-xs text-gray-400 mb-1">Legenda — intensidade (0 → {maxValue})</div>
-            <div className="flex items-center gap-2">{COLOR_RAMP.map((c,i)=> <div key={i} className="h-3 w-10 rounded" style={{ background:c }} />)}</div>
+            <div className="flex items-center gap-2">
+              {COLOR_RAMP.map((c,i)=> <div key={i} className="h-3 w-10 rounded" style={{ background:c }} />)}
+            </div>
           </div>
 
-          {/* rodapé com 2 cards */}
           <DashboardFooter
             monthKey={month}
             cur={(byMonth?.[month] as Record<string,number>) || {}}
@@ -283,7 +299,6 @@ export default function Dashboard(){
           />
         </div>
 
-        {/* coluna direita */}
         <aside className="card min-w-0">
           <h2 className="text-lg font-semibold mb-2">Detalhes do país</h2>
           <div className="space-y-3">
@@ -324,8 +339,3 @@ export default function Dashboard(){
     </main>
   );
 }
-
-/* utilitários esperados no CSS:
-.card => rounded-2xl bg-[#0e1624] p-5 shadow-lg
-.btn  => px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-sm
-.hint => opacity-75
