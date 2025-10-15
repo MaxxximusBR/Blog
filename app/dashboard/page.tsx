@@ -158,7 +158,10 @@ export default function Dashboard(){
           </div>
 
           <h3 className="font-semibold mt-6 mb-2">Buscar sigla de país (ISO-3)</h3>
-          <CountryCodeLookup onPick={(iso3:string)=> setSelected(normalizeCode(iso3))} />
+          <CountryCodeLookup
+  onPick={(iso3) => setSelected(normalizeCode(iso3))}
+  className="mt-4"
+/>
 
           <h3 className="font-semibold mt-6 mb-2">Top Países — {month}</h3>
           <div className="h-64">
