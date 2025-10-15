@@ -1,108 +1,55 @@
-'use client';
-import { useState } from 'react';
+{/* Banner animado (webm -> gif) com altura garantida */}
+<div className="mt-4">
+  <div
+    className="rounded-xl border border-white/10 bg-black/30 p-3"
+    style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+  >
+    {/* Vídeo: tenta tocar; se falhar, some e o GIF aparece */}
+    <video
+      id="radarVideo"
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      className="rounded-md border border-white/10"
+      style={{ width: 320, height: 180, objectFit: 'cover' }} // 16:9 fixo
+      onCanPlay={() => {
+        const gif = document.getElementById('radarGif');
+        if (gif) gif.setAttribute('style', 'display:none');
+      }}
+      onError={() => {
+        const vid = document.getElementById('radarVideo');
+        const gif = document.getElementById('radarGif');
+        if (vid) vid.setAttribute('style', 'display:none');
+        if (gif) gif.setAttribute('style', 'display:block;width:320px;height:auto;border-radius:8px;border:1px solid rgba(255,255,255,.1)');
+      }}
+    >
+      <source src="/media/radar.webm?v=9" type="video/webm" />
+      {/* se o navegador não suportar webm, o <img> abaixo cobre */}
+    </video>
 
-type Props = {
-  lat?: number;
-  lon?: number;
-  zoom?: number;
-  gifSizePx?: number;
-};
+    {/* GIF fallback (começa escondido; aparece se o vídeo falhar) */}
+    <img
+      id="radarGif"
+      src="/media/radar.gif?v=9"
+      alt="Radar animado"
+      style={{ display: 'none' }}
+      loading="eager"
+    />
 
-export default function AdsbPanel({
-  lat = -30.03,
-  lon = -51.22,
-  zoom = 6,
-  gifSizePx = 56,
-}: Props) {
-  const adsbfi = `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`;
-  const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
-  const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
-
-  const WEBM = `/media/radar.webm?v=7`;
-  const GIF  = `/media/radar.gif?v=7`;
-
-  const [showFallback, setShowFallback] = useState(true);
-  const [videoErro, setVideoErro] = useState<string | null>(null);
-
-  return (
-    <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between gap-4 mb-3">
-        <div className="min-w-0">
-          <h3 className="text-xl font-semibold">Tráfego aéreo em tempo real</h3>
-          <p className="hint">Abra o mapa interativo em nova aba (fonte: ADSB.fi / tar1090).</p>
-        </div>
-        <div className="shrink-0">
-          <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn whitespace-nowrap">Abrir mapa</a>
-        </div>
+    {/* Links de diagnóstico (sempre visíveis) */}
+    <div className="text-xs opacity-80">
+      <div className="mb-1">Diagnóstico:</div>
+      <div>
+        <a className="underline" href="/media/radar.webm?v=9" target="_blank" rel="noopener noreferrer">
+          /media/radar.webm
+        </a>
+        {'  '}•{'  '}
+        <a className="underline" href="/media/radar.gif?v=9" target="_blank" rel="noopener noreferrer">
+          /media/radar.gif
+        </a>
       </div>
-
-      {/* Painel ilustrativo */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <img src="/media/airtraffic.jpg" alt="Radar" className="w-full h-44 md:h-48 object-cover" loading="lazy" />
-        </div>
-        <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <img src="/media/cockpit.jpg" alt="Cockpit à noite" className="w-full h-44 md:h-48 object-cover" loading="lazy" />
-        </div>
-        <div className="col-span-2 rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <img src="/media/tower.jpg" alt="Torre de controle" className="w-full h-64 md:h-80 object-cover" loading="lazy" />
-        </div>
-      </div>
-
-      {/* Ações */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn">ADSB.fi (mapa)</a>
-        <a href={radarboxBrSul} target="_blank" rel="noopener noreferrer" className="btn">Radarbox — BR Sul</a>
-        <a href={fr24Poa} target="_blank" rel="noopener noreferrer" className="btn">FlightRadar24 — POA</a>
-      </div>
-
-      {/* Avisos */}
-      <div className="grid md:grid-cols-2 gap-3">
-        <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
-          <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
-        </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs opacity-80">
-          Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
-        </div>
-      </div>
-
-      {/* VÍDEO/GIF — agora com altura garantida */}
-      <div className="mt-4 mx-auto w-full max-w-[720px] rounded-xl border border-white/10 bg-black/30 overflow-hidden">
-        <div
-          className="relative w-full"
-          style={{ aspectRatio: '16 / 9', minHeight: 220 }} // garante altura mesmo sem plugin do Tailwind
-        >
-          {/* GIF por baixo */}
-          <img
-            src={GIF}
-            alt="Radar animado (fallback)"
-            className={`absolute inset-0 h-full w-full object-cover ${showFallback ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
-            loading="eager"
-          />
-          {/* Vídeo por cima */}
-          <video
-            className="absolute inset-0 h-full w-full object-cover"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            onCanPlay={() => { setShowFallback(false); setVideoErro(null); }}
-            onError={() => { setShowFallback(true); setVideoErro('Erro ao carregar o vídeo'); }}
-            poster="/media/airtraffic.jpg"
-          >
-            <source src={WEBM} type="video/webm" />
-            <img src={GIF} alt="Radar animado" />
-          </video>
-        </div>
-
-        {videoErro && (
-          <div className="px-3 py-2 text-xs opacity-70">
-            {videoErro}. Teste os arquivos: <a className="underline" href={WEBM} target="_blank" rel="noopener noreferrer">/media/radar.webm</a> ou <a className="underline" href={GIF} target="_blank" rel="noopener noreferrer">/media/radar.gif</a>.
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
+    </div>
+  </div>
+</div>
