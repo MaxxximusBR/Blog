@@ -1,53 +1,41 @@
 'use client';
-
-import { useEffect, useState } from 'react';
+import {useState} from 'react';
 
 type Props = {
   lat?: number;
   lon?: number;
   zoom?: number;
+  gifSizePx?: number;
 };
 
 export default function AdsbPanel({
   lat = -30.03,
   lon = -51.22,
   zoom = 6,
+  gifSizePx = 56,
 }: Props) {
   const adsbfi = `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`;
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  // arquivos estáticos (estão em /public/media)
-  const webmSrc = '/media/radar.webm?v=6';
-  const gifSrc  = '/media/radar.gif?v=6';
+  // versões com query para bustar cache do Vercel/CDN
+  const WEBM = `/media/radar.webm?v=6`;
+  const GIF  = `/media/radar.gif?v=6`;
 
-  // webm|gif|none
-  const [mode, setMode] = useState<'webm' | 'gif' | 'none'>('webm');
-
-  // decide no cliente se o navegador consegue tocar webm
-  useEffect(() => {
-    try {
-      const v = document.createElement('video');
-      // alguns navegadores retornam '' quando não suportam
-      const can = v.canPlayType?.('video/webm; codecs="vp9,opus"') || v.canPlayType?.('video/webm');
-      if (!can) setMode('gif');
-    } catch {
-      setMode('gif');
-    }
-  }, []);
+  // mostra GIF até o vídeo “dar play”; se o vídeo errar, mantém o GIF
+  const [showFallback, setShowFallback] = useState(true);
+  const [videoErro, setVideoErro] = useState<string | null>(null);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
-      {/* Cabeçalho */}
+      {/* Cabeçalho: título | botão */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <div className="min-w-0">
           <h3 className="text-xl font-semibold">Tráfego aéreo em tempo real</h3>
           <p className="hint">Abra o mapa interativo em nova aba (fonte: ADSB.fi / tar1090).</p>
         </div>
         <div className="shrink-0">
-          <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn whitespace-nowrap">
-            Abrir mapa
-          </a>
+          <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn whitespace-nowrap">Abrir mapa</a>
         </div>
       </div>
 
@@ -74,56 +62,50 @@ export default function AdsbPanel({
       {/* Avisos */}
       <div className="grid md:grid-cols-2 gap-3">
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
-          <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver
-          camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
+          <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
         </div>
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs opacity-80">
           Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
         </div>
       </div>
 
-      {/* vídeo/GIF decorativo logo abaixo do aviso */}
-      <div className="mt-4 flex items-center justify-center">
-        {mode === 'webm' && (
-          <video
-            className="rounded-xl ring-1 ring-white/10 shadow-lg max-w-full"
-            style={{ width: 340, height: 340, objectFit: 'cover' }}
-            src={webmSrc}
-            poster="/media/airtraffic.jpg"
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-            // se der erro de carregamento, cai para gif
-            onError={() => setMode('gif')}
-          >
-            <source src={webmSrc} type="video/webm" />
-          </video>
-        )}
-
-        {mode === 'gif' && (
+      {/* === VÍDEO/GIF — colocado ABAIXO do aviso, como pedido === */}
+      <div className="mt-4 rounded-xl border border-white/10 bg-black/30 overflow-hidden">
+        <div className="relative w-full max-w-[720px] aspect-[16/9] mx-auto">
+          {/* Fallback GIF por baixo */}
           <img
-            src={gifSrc}
-            alt="Radar animado"
-            width={320}
-            height={320}
-            className="rounded-xl ring-1 ring-white/10 shadow-lg"
+            src={GIF}
+            alt="Radar animado (fallback)"
+            className={`absolute inset-0 h-full w-full object-cover ${showFallback ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
             loading="eager"
-            onError={() => setMode('none')}
           />
-        )}
-
-        {mode === 'none' && (
-          <a
-            href={webmSrc}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30"
-            title="Abrir o arquivo do vídeo diretamente para testar"
+          {/* Vídeo por cima; quando pode tocar, escondemos o GIF */}
+          <video
+            className="absolute inset-0 h-full w-full object-cover"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            onCanPlay={() => { setShowFallback(false); setVideoErro(null); }}
+            onError={(e) => { setShowFallback(true); setVideoErro('Erro ao carregar o vídeo'); }}
+            poster="/media/airtraffic.jpg"
           >
-            Vídeo/GIF indisponível — clique para testar /media/radar.webm
-          </a>
+            <source src={WEBM} type="video/webm" />
+            {/* fallback SEM JS — se o browser não suportar video/webm */}
+            <img src={GIF} alt="Radar animado" />
+          </video>
+        </div>
+
+        {/* Linha de diagnóstico (aparece só se o vídeo falhar) */}
+        {videoErro && (
+          <div className="px-3 py-2 text-xs opacity-70">
+            {videoErro}. Teste os arquivos:{" "}
+            <a className="underline" href={WEBM} target="_blank" rel="noopener noreferrer">/media/radar.webm</a>{" "}
+            ou{" "}
+            <a className="underline" href={GIF} target="_blank" rel="noopener noreferrer">/media/radar.gif</a>.
+            Se abrir 404, confirme que os nomes (inclusive maiúsculas/minúsculas) batem exatamente com os arquivos em <code>public/media</code>.
+          </div>
         )}
       </div>
     </section>
