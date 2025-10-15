@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type Props = {
   lat?: number;
@@ -17,12 +17,24 @@ export default function AdsbPanel({
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  // arquivos estáticos em /public/media
-  const webmSrc = `/media/radar.webm?v=5`;
-  const gifSrc  = `/media/radar.gif?v=5`;
+  // arquivos estáticos (estão em /public/media)
+  const webmSrc = '/media/radar.webm?v=6';
+  const gifSrc  = '/media/radar.gif?v=6';
 
-  const [videoOk, setVideoOk] = useState(true);
-  const [gifOk, setGifOk] = useState(true);
+  // webm|gif|none
+  const [mode, setMode] = useState<'webm' | 'gif' | 'none'>('webm');
+
+  // decide no cliente se o navegador consegue tocar webm
+  useEffect(() => {
+    try {
+      const v = document.createElement('video');
+      // alguns navegadores retornam '' quando não suportam
+      const can = v.canPlayType?.('video/webm; codecs="vp9,opus"') || v.canPlayType?.('video/webm');
+      if (!can) setMode('gif');
+    } catch {
+      setMode('gif');
+    }
+  }, []);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
@@ -32,7 +44,6 @@ export default function AdsbPanel({
           <h3 className="text-xl font-semibold">Tráfego aéreo em tempo real</h3>
           <p className="hint">Abra o mapa interativo em nova aba (fonte: ADSB.fi / tar1090).</p>
         </div>
-
         <div className="shrink-0">
           <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn whitespace-nowrap">
             Abrir mapa
@@ -71,11 +82,10 @@ export default function AdsbPanel({
         </div>
       </div>
 
-      {/* --- VÍDEO DECORATIVO ABAIXO DO AVISO --- */}
+      {/* vídeo/GIF decorativo logo abaixo do aviso */}
       <div className="mt-4 flex items-center justify-center">
-        {videoOk ? (
+        {mode === 'webm' && (
           <video
-            key="radar-webm"
             className="rounded-xl ring-1 ring-white/10 shadow-lg max-w-full"
             style={{ width: 340, height: 340, objectFit: 'cover' }}
             src={webmSrc}
@@ -84,31 +94,35 @@ export default function AdsbPanel({
             loop
             muted
             playsInline
-            onError={() => setVideoOk(false)}
+            preload="auto"
+            // se der erro de carregamento, cai para gif
+            onError={() => setMode('gif')}
           >
-            {/* Fallback de source extra (alguns navegadores) */}
             <source src={webmSrc} type="video/webm" />
           </video>
-        ) : gifOk ? (
+        )}
+
+        {mode === 'gif' && (
           <img
-            key="radar-gif"
             src={gifSrc}
             alt="Radar animado"
             width={320}
             height={320}
             className="rounded-xl ring-1 ring-white/10 shadow-lg"
-            onError={() => setGifOk(false)}
             loading="eager"
+            onError={() => setMode('none')}
           />
-        ) : (
+        )}
+
+        {mode === 'none' && (
           <a
             href={webmSrc}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30"
-            title="Abrir o arquivo do vídeo diretamente"
+            title="Abrir o arquivo do vídeo diretamente para testar"
           >
-            Vídeo/GIF indisponível — clicar para testar /media/radar.webm
+            Vídeo/GIF indisponível — clique para testar /media/radar.webm
           </a>
         )}
       </div>
