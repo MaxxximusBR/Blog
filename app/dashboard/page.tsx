@@ -75,14 +75,13 @@ function MonthReports({ monthKey }: { monthKey: string }) {
           <li key={r.slug} className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <div className="font-medium truncate">{r.title || `Relatório ${r.slug}`}</div>
-              {/* se não tiver plugin line-clamp, o combo abaixo evita vazamento */}
               {r.summary && (
-                <div className="text-sm opacity-80 max-h-12 overflow-hidden text-ellipsis">
+                <div className="text-sm opacity-80 max-h-14 overflow-hidden text-ellipsis">
                   {r.summary}
                 </div>
               )}
             </div>
-            <div className="shrink-0 flex flex-wrap gap-2">
+            <div className="shrink-0 ml-auto flex flex-wrap gap-2">
               <a href={`/report/${r.slug}`} className="btn">Abrir</a>
               <a href={r.file} target="_blank" rel="noopener" className="btn">PDF</a>
             </div>
@@ -199,11 +198,12 @@ function DashboardFooter({
   prev:Record<string,number>;
   nameOf:(iso3:string)=>string;
 }){
+  // Layout robusto: 1 col → 2 col em md → 3 col em 2xl; cards sempre com a mesma altura
   return (
-    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-      <RegionBreakdown cur={cur}/>
-      <MonthDelta cur={cur} prev={prev} nameOf={nameOf} monthKey={monthKey} prevKey={prevOf(monthKey)} />
-      <MonthReports monthKey={monthKey}/>
+    <div className="mt-6 -mx-2 flex flex-wrap items-stretch">
+      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><RegionBreakdown cur={cur}/></div>
+      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><MonthDelta cur={cur} prev={prev} nameOf={nameOf} monthKey={monthKey} prevKey={prevOf(monthKey)} /></div>
+      <div className="w-full md:w-1/2 2xl:w-1/3 px-2 mb-4"><MonthReports monthKey={monthKey}/></div>
     </div>
   );
 }
@@ -252,7 +252,7 @@ export default function Dashboard(){
       {/* grade principal */}
       <section className="grid lg:grid-cols-3 gap-6 items-start">
         {/* coluna esquerda */}
-        <div className="lg:col-span-2 card min-w-0">
+        <div className="lg:col-span-2 card min-w-0 overflow-x-hidden pb-5">
           <div className="flex items-center gap-3 mb-3">
             <label className="hint">Mês:</label>
             <select className="bg-black/40 border border-gray-700 rounded px-3 py-1" value={month} onChange={(e)=> setMonth(normalizeMonth(e.target.value))}>
