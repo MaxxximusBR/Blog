@@ -1,57 +1,36 @@
 'use client';
 
+import { useState } from 'react';
+
 type Props = {
   lat?: number;
   lon?: number;
   zoom?: number;
-  /** Tamanho do vídeo/ícone animado no cabeçalho (px) */
-  gifSizePx?: number;
 };
 
 export default function AdsbPanel({
   lat = -30.03,
   lon = -51.22,
   zoom = 6,
-  gifSizePx = 56, // ~30% maior que um ícone/avatazinho
 }: Props) {
   const adsbfi = `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`;
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
+  // arquivos estáticos em /public/media
+  const webmSrc = `/media/radar.webm?v=5`;
+  const gifSrc  = `/media/radar.gif?v=5`;
+
+  const [videoOk, setVideoOk] = useState(true);
+  const [gifOk, setGifOk] = useState(true);
+
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
-      {/* Cabeçalho: título | vídeo animado | botão */}
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <div className="min-w-0">
           <h3 className="text-xl font-semibold">Tráfego aéreo em tempo real</h3>
           <p className="hint">Abra o mapa interativo em nova aba (fonte: ADSB.fi / tar1090).</p>
-        </div>
-
-        {/* Animação: usa .webm (leve); se falhar, cai para um GIF (opcional) */}
-        <div className="shrink-0">
-          <video
-            width={gifSizePx}
-            height={gifSizePx}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="metadata"
-            className="rounded-full ring-1 ring-white/10 shadow-lg opacity-95 object-cover"
-            aria-label="Radar animado"
-            poster="/media/airtraffic.jpg"
-            style={{ width: gifSizePx, height: gifSizePx }}
-          >
-            <source src="/media/radar.webm?v=1" type="video/webm" />
-            {/* fallback (opcional): se tiver um GIF menor otimizado */}
-            <img
-              src="/media/radar.gif?v=3"
-              alt="Radar animado"
-              width={gifSizePx}
-              height={gifSizePx}
-              loading="eager"
-            />
-          </video>
         </div>
 
         <div className="shrink-0">
@@ -85,11 +64,53 @@ export default function AdsbPanel({
       <div className="grid md:grid-cols-2 gap-3">
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
           <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver
-          camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real abre em nova guia.
+          camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
         </div>
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs opacity-80">
           Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
         </div>
+      </div>
+
+      {/* --- VÍDEO DECORATIVO ABAIXO DO AVISO --- */}
+      <div className="mt-4 flex items-center justify-center">
+        {videoOk ? (
+          <video
+            key="radar-webm"
+            className="rounded-xl ring-1 ring-white/10 shadow-lg max-w-full"
+            style={{ width: 340, height: 340, objectFit: 'cover' }}
+            src={webmSrc}
+            poster="/media/airtraffic.jpg"
+            autoPlay
+            loop
+            muted
+            playsInline
+            onError={() => setVideoOk(false)}
+          >
+            {/* Fallback de source extra (alguns navegadores) */}
+            <source src={webmSrc} type="video/webm" />
+          </video>
+        ) : gifOk ? (
+          <img
+            key="radar-gif"
+            src={gifSrc}
+            alt="Radar animado"
+            width={320}
+            height={320}
+            className="rounded-xl ring-1 ring-white/10 shadow-lg"
+            onError={() => setGifOk(false)}
+            loading="eager"
+          />
+        ) : (
+          <a
+            href={webmSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30"
+            title="Abrir o arquivo do vídeo diretamente"
+          >
+            Vídeo/GIF indisponível — clicar para testar /media/radar.webm
+          </a>
+        )}
       </div>
     </section>
   );
