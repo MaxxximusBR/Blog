@@ -170,4 +170,75 @@ export default function MetarPage(){
                             <div><span className="opacity-70">Vento:</span> {d.vento}</div>
                             <div><span className="opacity-70">Visibilidade:</span> {d.vis}</div>
                             {d.wx && <div><span className="opacity-70">Tempo:</span> {d.wx}</div>}
-                            {d.nublado && <div><span className="opacity-70">Nuvens:</span> {d.nubl
+                            {d.nublado && <div><span className="opacity-70">Nuvens:</span> {d.nublado}</div>}
+                            <div className="mt-1 opacity-80 text-xs">
+                              {d.temp!=null && <>Temp {d.temp}°C</>} {d.dew!=null && <> • Pto Orv {d.dew}°C</>}
+                              {d.alt!=null && <> • Altímetro {d.alt} inHg</>}
+                            </div>
+                          </div>
+                          <div className="mt-2 rounded bg-white/5 px-2 py-1 font-mono text-xs">{d.raw}</div>
+                        </>
+                      ) : (
+                        <div className="mt-2 text-sm opacity-70">Sem METAR recente.</div>
+                      )}
+
+                      {rows.length>1 && (
+                        <details className="mt-2">
+                          <summary className="text-xs opacity-70 cursor-pointer">Histórico (últimas horas)</summary>
+                          <div className="mt-2 space-y-1">
+                            {rows.slice(1).map((r, idx) => {
+                              const dd = decodeMetar(r);
+                              return (
+                                <div key={idx} className="rounded border border-white/10 px-2 py-1">
+                                  <div className="text-[11px] opacity-70">{dd.timeISO ? new Date(dd.timeISO).toLocaleString() : ''}</div>
+                                  <div className="font-mono text-xs">{dd.raw}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
+          <h2 className="text-lg font-semibold mb-2">SIGMET — FIR Brasil (ativos)</h2>
+          <p className="text-xs opacity-70 mb-3">
+            Exibindo SIGMET(s) internacionais com FIR: SBAZ (Amazônica), SBBS (Brasília), SBRE (Recife), SBCW (Curitiba). Fonte: AWC/NOAA.
+          </p>
+
+          {!sigmet || !Array.isArray(sigmet.features) || sigmet.features.length===0 ? (
+            <div className="text-sm opacity-70">Nenhum SIGMET ativo no momento.</div>
+          ) : (
+            <div className="grid gap-2">
+              {sigmet.features.map((f:any, i:number) => {
+                const p = f.properties ?? {};
+                return (
+                  <div key={i} className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">{(p.hazard ?? 'SIGMET').toString().toUpperCase()} — {p.fir ?? p.firId ?? p.firname ?? ''}</div>
+                      <div className="text-xs opacity-70">{p.validTimeFrom} → {p.validTimeTo}</div>
+                    </div>
+                    <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap">
+                      {p.raw ?? p.text ?? '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <footer className="mt-8 text-xs opacity-70">
+          Dados via <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">AviationWeather.gov Data API</a>.
+          Restrições: sem CORS (uso via rotas servidor) e rate limit (~100 req/min).
+        </footer>
+      </section>
+    </main>
+  );
+}
