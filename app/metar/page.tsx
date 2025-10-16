@@ -120,7 +120,7 @@ export default function MetarPage(){
       if(!map.has(icao)) map.set(icao, []);
       map.get(icao)!.push(r);
     }
-    for(const [k, arr] of map){
+    for(const [, arr] of map){
       arr.sort((a,b) => (new Date(b?.obsTime ?? b?.time ?? b?.issueTime ?? 0).getTime()) - (new Date(a?.obsTime ?? a?.time ?? a?.issueTime ?? 0).getTime()));
     }
     return map;
@@ -128,7 +128,11 @@ export default function MetarPage(){
 
   return (
     <main className="relative">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover" style={{ backgroundImage: `url('/media/cartaifr.jpg')` }} />
+      {/* BG: troca para /media/weather.jpg + overlay escuro */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
+        style={{ backgroundImage: `url('/media/weather.jpg')` }}
+      />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-black/90 backdrop-blur-[1px]" />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
