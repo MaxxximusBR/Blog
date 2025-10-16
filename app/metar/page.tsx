@@ -38,7 +38,6 @@ function normalizeTime(t: any): string | null {
     return new Date(ms).toISOString();
   }
   if (typeof t === 'string') {
-    // num-string?
     if (/^\d+$/.test(t)) {
       const n = parseInt(t, 10);
       const ms = n < 1e12 ? n * 1000 : n;
@@ -55,7 +54,6 @@ function fmtFL(v: any): string | null {
   if (v == null || v === '') return null;
   const n = Number(v);
   if (!Number.isFinite(n)) return `FL${v}`;
-  // se veio em pés (muito grande), converte para centenas de pés
   const fl = n > 2000 ? Math.round(n / 100) : Math.round(n);
   return `FL${fl}`;
 }
@@ -211,11 +209,39 @@ export default function MetarPage(){
       <div className="pointer-events-none absolute inset-0 -z-10 bg-black/90 backdrop-blur-[1px]" />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
+        {/* Cabeçalho com vídeo decorativo à direita */}
         <header className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">METAR & SIGMET — Principais Aeroportos</h1>
-          <p className="mt-2 text-sm opacity-80">
-            Fonte: <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">Aviation Weather Center / NOAA</a>. Atualiza automaticamente a cada 60s.
-          </p>
+          <div className="flex items-center gap-4 md:gap-6">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                METAR &amp; SIGMET — Principais Aeroportos
+              </h1>
+              <p className="mt-2 text-sm opacity-80">
+                Fonte: <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">Aviation Weather Center / NOAA</a>. Atualiza automaticamente a cada 60s.
+              </p>
+            </div>
+
+            {/* vídeo decorativo — oculto em telas pequenas */}
+            <div className="hidden md:block shrink-0">
+              <div className="w-[320px] h-[120px] rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-lg">
+                <video
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  preload="metadata"
+                  aria-hidden="true"
+                  role="presentation"
+                >
+                  <source src="/media/metarsigmet.mp4" type="video/mp4" />
+                  {/* se quiser, adicione um .webm como fallback:
+                  <source src="/media/metarsigmet.webm" type="video/webm" />
+                  */}
+                </video>
+              </div>
+            </div>
+          </div>
         </header>
 
         {err && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm mb-4">Erro: {err}</div>}
