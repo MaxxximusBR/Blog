@@ -26,7 +26,7 @@ async function loadCreds(){
   const envPass = process.env.ADMIN_PASSWORD || '';
   const envTotp = process.env.ADMIN_TOTP_SECRET || '';
   if(envPass && envTotp) return { passwordHash: envPass, totpSecret: envTotp, envPlain: true };
-  return { passwordHash: demoHash('@ufo12345@'), scheme:'DEMO_SHA256', totpSecret: 'JBSWY3DPEHPK3PXP', fallback:true };
+  return { passwordHash: demoHash('ufo12345'), scheme:'DEMO_SHA256', totpSecret: 'JBSWY3DPEHPK3PXP', fallback:true };
 }
 
 export async function POST(req: Request){
