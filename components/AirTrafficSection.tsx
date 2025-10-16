@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 
 type Props = {
   lat?: number;
@@ -41,29 +40,78 @@ export default function AdsbPanel({
         </div>
       </div>
 
-      {/* Painel ilustrativo com imagens */}
+      {/* Painel ilustrativo com imagens (com vídeo no hover para cockpit/tower) */}
       <div className="grid grid-cols-2 gap-3 mb-4">
+        {/* cartão simples */}
         <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
           <img src="/media/airtraffic.jpg" alt="Radar" className="w-full h-44 md:h-48 object-cover" loading="lazy" />
         </div>
-        <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <img src="/media/cockpit.jpg" alt="Cockpit à noite" className="w-full h-44 md:h-48 object-cover" loading="lazy" />
-        </div>
-        <div className="col-span-2 rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <img src="/media/tower.jpg" alt="Torre de controle" className="w-full h-64 md:h-80 object-cover" loading="lazy" />
-        </div>
+
+        {/* C O C K P I T  → vídeo no hover + link p/ METAR */}
+        <a
+          href="/metar"
+          className="group relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          aria-label="Abrir página METAR"
+        >
+          {/* imagem base */}
+          <img
+            src="/media/cockpit.jpg"
+            alt="Cockpit à noite"
+            className="w-full h-44 md:h-48 object-cover transition-opacity duration-300 group-hover:opacity-0"
+            loading="lazy"
+          />
+          {/* vídeo que aparece no hover */}
+          <video
+            className="pointer-events-none absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+          >
+            <source src="/media/cockpit.mp4" type="video/mp4" />
+          </video>
+          {/* sutil overlay para legibilidade */}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">METAR</span>
+        </a>
+
+        {/* T O W E R  → vídeo no hover + link p/ Frequências ATC */}
+        <a
+          href="/frequencias-atc"
+          className="group col-span-2 relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+          aria-label="Abrir página Frequências ATC"
+        >
+          {/* imagem base */}
+          <img
+            src="/media/tower.jpg"
+            alt="Torre de controle"
+            className="w-full h-64 md:h-80 object-cover transition-opacity duration-300 group-hover:opacity-0"
+            loading="lazy"
+          />
+          {/* vídeo que aparece no hover */}
+          <video
+            className="pointer-events-none absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+          >
+            <source src="/media/towelive.mp4" type="video/mp4" />
+          </video>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">Frequências ATC</span>
+        </a>
       </div>
 
-      {/* Ações rápidas (externo + link interno) */}
+      {/* Ações rápidas (externo) */}
       <div className="flex flex-wrap gap-2 mb-3">
         <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn">ADSB.fi (mapa)</a>
         <a href={radarboxBrSul} target="_blank" rel="noopener noreferrer" className="btn">Radarbox — BR Sul</a>
         <a href={fr24Poa} target="_blank" rel="noopener noreferrer" className="btn">FlightRadar24 — POA</a>
-
-        {/* NOVO: link interno para a página com mapa + frequências */}
-        <Link href="/atc-frequencias" className="btn">
-          Frequências ATC — Brasil
-        </Link>
       </div>
 
       {/* Aviso de dados */}
@@ -86,11 +134,7 @@ export default function AdsbPanel({
               preload="metadata"
               aria-label="Animação de radar de tráfego aéreo"
             >
-              {/* novo vídeo (anexo) */}
               <source src="/media/atcradar.mp4" type="video/mp4" />
-              {/* se desejar manter um fallback webm, adicione abaixo:
-              <source src="/media/traffic-radar.webm" type="video/webm" />
-              */}
             </video>
           </div>
 
