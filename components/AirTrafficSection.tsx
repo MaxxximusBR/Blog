@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 
 type Props = {
   lat?: number;
@@ -53,11 +54,16 @@ export default function AdsbPanel({
         </div>
       </div>
 
-      {/* Ações rápidas (externo) */}
+      {/* Ações rápidas (externo + link interno) */}
       <div className="flex flex-wrap gap-2 mb-3">
         <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn">ADSB.fi (mapa)</a>
         <a href={radarboxBrSul} target="_blank" rel="noopener noreferrer" className="btn">Radarbox — BR Sul</a>
         <a href={fr24Poa} target="_blank" rel="noopener noreferrer" className="btn">FlightRadar24 — POA</a>
+
+        {/* NOVO: link interno para a página com mapa + frequências */}
+        <Link href="/atc-frequencias" className="btn">
+          Frequências ATC — Brasil
+        </Link>
       </div>
 
       {/* Aviso de dados */}
