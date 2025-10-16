@@ -16,17 +16,27 @@ type ATCSite = {
   source?: string;
 };
 
+type CoveragePoly = {
+  id: string;
+  name: string;
+  cindacta: 'I' | 'II' | 'III' | 'IV';
+  color: string;
+  coords: [number, number][];
+};
+
 type Props = {
   data: ATCSite[];
   visibleTypes: Set<string>;
+  mode: 'points' | 'coverage';
+  coverage: CoveragePoly[];
 };
 
-export default function ATCMap({ data, visibleTypes }: Props) {
+export default function ATCMap({ data, visibleTypes, mode, coverage }: Props) {
   const mapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let map: any;
-    let markers: any[] = [];
+    let layers: any[] = [];
 
     (async () => {
       const L = await import('leaflet');
@@ -49,66 +59,74 @@ export default function ATCMap({ data, visibleTypes }: Props) {
         zoomControl: true,
       });
 
-      // Tile escuro legível
+      // Tile claro (boa leitura sobre fundo escuro da página)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution:
-          '© OpenStreetMap contributors',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map);
 
-      // Adiciona marcadores filtrados
-      const filtered = data.filter((d) => visibleTypes.has(d.type));
       const bounds = L.latLngBounds([]);
 
-      filtered.forEach((d) => {
-        const popupHtml = `
-          <div style="min-width:220px">
-            <div style="font-weight:600;font-size:14px;margin-bottom:2px">${d.name}</div>
-            <div style="font-size:12px;opacity:.85;margin-bottom:6px">
-              <span>${d.type}</span> ${d.icao ? `• <span>${d.icao}</span>` : ''} ${d.city ? `• ${d.city}/${d.state ?? ''}` : ''}
-            </div>
-            <div style="font-size:12px;line-height:1.3">
-              <div><strong>VHF:</strong> ${d.vhf.join(', ')} MHz</div>
-              ${
-                d.uhf && d.uhf.length
-                  ? `<div><strong>UHF:</strong> ${d.uhf.join(', ')} MHz</div>`
-                  : ''
-              }
-              ${
-                d.source
-                  ? `<div style="opacity:.7;margin-top:6px">Fonte: ${d.source}</div>`
-                  : ''
-              }
-            </div>
-          </div>
-        `;
+      if (mode === 'points') {
+        // Marcadores filtrados
+        const filtered = data.filter((d) => visibleTypes.has(d.type));
 
-        const marker = L.marker([d.lat, d.lon]).addTo(map).bindPopup(popupHtml);
-        markers.push(marker);
-        bounds.extend([d.lat, d.lon]);
-      });
+        filtered.forEach((d) => {
+          const popupHtml = `
+            <div style="min-width:220px">
+              <div style="font-weight:600;font-size:14px;margin-bottom:2px">${d.name}</div>
+              <div style="font-size:12px;opacity:.85;margin-bottom:6px">
+                <span>${d.type}</span> ${d.icao ? `• <span>${d.icao}</span>` : ''} ${d.city ? `• ${d.city}/${d.state ?? ''}` : ''}
+              </div>
+              <div style="font-size:12px;line-height:1.3">
+                <div><strong>VHF:</strong> ${d.vhf.join(', ')} MHz</div>
+                ${d.uhf && d.uhf.length ? `<div><strong>UHF:</strong> ${d.uhf.join(', ')} MHz</div>` : ''}
+                ${d.source ? `<div style="opacity:.7;margin-top:6px">Fonte: ${d.source}</div>` : ''}
+              </div>
+            </div>
+          `;
+          const marker = L.marker([d.lat, d.lon]).addTo(map).bindPopup(popupHtml);
+          layers.push(marker);
+          bounds.extend([d.lat, d.lon]);
+        });
 
-      if (filtered.length > 0) {
-        map.fitBounds(bounds.pad(0.15));
+        if (filtered.length > 0) map.fitBounds(bounds.pad(0.15));
+      } else {
+        // Polígonos de cobertura (CINDACTA)
+        coverage.forEach((p) => {
+          const poly = L.polygon(p.coords, {
+            color: p.color,
+            weight: 2,
+            opacity: 0.8,
+            fillColor: p.color,
+            fillOpacity: 0.12,
+          })
+            .addTo(map)
+            .bindTooltip(p.name, { sticky: true });
+
+          layers.push(poly);
+          p.coords.forEach(([lat, lon]) => bounds.extend([lat, lon]));
+        });
+
+        if (coverage.length > 0) map.fitBounds(bounds.pad(0.1));
       }
 
       // cleanup
       return () => {
-        markers.forEach((m) => m.remove());
+        layers.forEach((l) => l.remove());
         map.remove();
       };
     })();
 
     // cleanup quando o componente desmonta
     return () => {
-      // no-op; a IIFE já retorna um cleanup quando resolve
+      // a IIFE já retorna um cleanup quando resolve
     };
-  }, [data, visibleTypes]);
+  }, [data, visibleTypes, mode, coverage]);
 
   return (
     <div
       ref={mapRef}
       className="h-[60vh] w-full rounded-xl overflow-hidden"
-      // estiliza um leve contorno para destacar no fundo escuro
       style={{ outline: '1px solid rgba(255,255,255,.08)' }}
     />
   );
