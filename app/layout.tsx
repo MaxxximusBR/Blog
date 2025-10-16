@@ -1,4 +1,3 @@
-
 import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import Link from 'next/link';
@@ -21,6 +20,7 @@ export default function RootLayout({ children }:{ children:React.ReactNode }){
               <Link href="/reports" className="hover:underline">Relatórios</Link>
               <Link href="/dashboard" className="hover:underline">Consolidação</Link>
               <Link href="/news" className="hover:underline">Notícias</Link>
+              <Link href="/atc-frequencias" className="hover:underline">Frequências ATC</Link>
               <a href="https://www.youtube.com/@LuzesAbismo" target="_blank" rel="noreferrer" className="hover:underline">YouTube</a>
               <Link href="/login" className="hover:underline">Admin</Link>
             </nav>
@@ -29,7 +29,9 @@ export default function RootLayout({ children }:{ children:React.ReactNode }){
         <main className="container-narrow py-8">{children}</main>
         <footer className="container-narrow py-12 text-sm text-gray-400">
           © 2025 — Projeto Luzes do Abismo + Luzes POA 2022
-        </footer>      </body>
+        </footer>
+      </body>
     </html>
   );
 }
+
