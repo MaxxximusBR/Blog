@@ -18,13 +18,46 @@ const STATIONS: StationDef[] = [
   { city: 'Salvador',        icaos: ['SBSV'] },
 ];
 
-/** util: pega a primeira chave disponível */
+/* ------------------------------------------------------------------ */
+/* helpers                                                             */
+/* ------------------------------------------------------------------ */
+
 function pick<T = string>(obj: any, keys: string[], def?: T): T | undefined {
   for (const k of keys) {
     const v = obj?.[k];
     if (v !== undefined && v !== null && v !== '') return v as T;
   }
   return def;
+}
+
+/** Converte tempo (ISO | epoch s | epoch ms | num-string) para ISO */
+function normalizeTime(t: any): string | null {
+  if (t == null) return null;
+  if (typeof t === 'number') {
+    const ms = t < 1e12 ? t * 1000 : t;
+    return new Date(ms).toISOString();
+  }
+  if (typeof t === 'string') {
+    // num-string?
+    if (/^\d+$/.test(t)) {
+      const n = parseInt(t, 10);
+      const ms = n < 1e12 ? n * 1000 : n;
+      return new Date(ms).toISOString();
+    }
+    const d = new Date(t);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}
+
+/** Formata Flight Level: aceita valor em FL (ex.: 480) ou em pés (ex.: 48000) */
+function fmtFL(v: any): string | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return `FL${v}`;
+  // se veio em pés (muito grande), converte para centenas de pés
+  const fl = n > 2000 ? Math.round(n / 100) : Math.round(n);
+  return `FL${fl}`;
 }
 
 /** Extrai um array de METAR de múltiplos formatos (AWC novo, ADDS antigo etc.) */
@@ -40,7 +73,10 @@ function extractMetars(j: any): any[] {
   return [];
 }
 
-// --- decodificador simples p/ METAR em PT-BR (campos comuns)
+/* ------------------------------------------------------------------ */
+/* METAR decode                                                        */
+/* ------------------------------------------------------------------ */
+
 function decodeMetar(m: any) {
   const raw = m?.rawOb ?? m?.raw_text ?? m?.raw ?? m?.properties?.rawOb ?? '';
 
@@ -48,12 +84,15 @@ function decodeMetar(m: any) {
     m?.icaoId ?? m?.station_id ?? m?.id ?? m?.station ?? '????'
   ).toUpperCase();
 
-  const timeISO =
+  const timeRaw =
     m?.obsTime ??
     m?.time ??
     m?.issueTime ??
     m?.observed ??
-    m?.observation_time ?? null;
+    m?.observation_time ??
+    null;
+
+  const timeISO = normalizeTime(timeRaw);
 
   // vento
   const windDir = m?.wind?.dir ?? m?.wind_dir_degrees ?? m?.wdir ?? m?.winddir ?? null;
@@ -112,6 +151,10 @@ function useTicker(ms:number){
   return tick;
 }
 
+/* ------------------------------------------------------------------ */
+/* Página                                                              */
+/* ------------------------------------------------------------------ */
+
 export default function MetarPage(){
   const allIds = useMemo(() => STATIONS.flatMap(s => s.icaos).join(','), []);
   const [metars, setMetars] = useState<any[]>([]);
@@ -152,7 +195,10 @@ export default function MetarPage(){
       map.get(icao)!.push(r);
     }
     for(const [, arr] of map){
-      const getT = (x:any) => new Date(x?.obsTime ?? x?.time ?? x?.issueTime ?? x?.observed ?? x?.observation_time ?? 0).getTime();
+      const getT = (x:any) => {
+        const iso = normalizeTime(x?.obsTime ?? x?.time ?? x?.issueTime ?? x?.observed ?? x?.observation_time ?? null);
+        return iso ? new Date(iso).getTime() : 0;
+      };
       arr.sort((a,b) => getT(b) - getT(a));
     }
     return map;
@@ -193,7 +239,7 @@ export default function MetarPage(){
                       <div className="flex items-center justify-between">
                         <div className="font-semibold">{icao}</div>
                         <div className="text-xs opacity-70">
-                          {d?.timeISO ? new Date(d.timeISO).toLocaleString() : (loading ? 'carregando...' : '—')}
+                          {d?.timeISO ? new Date(d.timeISO).toLocaleString('pt-BR', { hour12: false }) : (loading ? 'carregando...' : '—')}
                         </div>
                       </div>
 
@@ -223,7 +269,7 @@ export default function MetarPage(){
                               const dd = decodeMetar(r);
                               return (
                                 <div key={idx} className="rounded border border-white/10 px-2 py-1">
-                                  <div className="text-[11px] opacity-70">{dd.timeISO ? new Date(dd.timeISO).toLocaleString() : ''}</div>
+                                  <div className="text-[11px] opacity-70">{dd.timeISO ? new Date(dd.timeISO).toLocaleString('pt-BR', { hour12: false }) : ''}</div>
                                   <div className="font-mono text-xs">{dd.raw}</div>
                                 </div>
                               );
@@ -255,21 +301,34 @@ export default function MetarPage(){
 
                 const fir   = pick<string>(p, ['fir','firId','firname','firName'], '')!;
                 const haz   = (pick<string>(p, ['hazard','phenomenon','event'], '') || 'SIGMET').toString().toUpperCase();
-                const from  = pick<string>(p, ['validTimeFrom','valid_time_from','validFrom','valid_from'], '');
-                const to    = pick<string>(p, ['validTimeTo','valid_time_to','validTo','valid_to'], '');
+
+                const fromISO = normalizeTime(
+                  pick<string>(p, ['validTimeFrom','valid_time_from','validFrom','valid_from'], '')
+                );
+                const toISO   = normalizeTime(
+                  pick<string>(p, ['validTimeTo','valid_time_to','validTo','valid_to'], '')
+                );
+
                 const text  = pick<string>(p, ['raw','raw_text','text','message'], '');
 
                 const intensity = pick<string>(p, ['intensity','severity'], '');
                 const obsFcst   = pick<string>(p, ['obsOrFcst','obs_fcst','reportType'], '');
-                const minFL     = pick<string | number>(p, ['min_fcst_flight_level','min_fl','bottom_fl','min_ft','base'], '');
-                const maxFL     = pick<string | number>(p, ['max_fcst_flight_level','max_fl','top_fl','max_ft','top'], '');
+                const minV      = pick<string | number>(p, ['min_fcst_flight_level','min_fl','bottom_fl','min_ft','base'], '');
+                const maxV      = pick<string | number>(p, ['max_fcst_flight_level','max_fl','top_fl','max_ft','top'], '');
+                const minFL     = fmtFL(minV);
+                const maxFL     = fmtFL(maxV);
                 const movement  = pick<string>(p, ['movement','movementDir','dir'], '');
                 const speed     = pick<string | number>(p, ['movementSpeed','speed'], '');
+
+                const levels =
+                  minFL && maxFL ? `Níveis: ${minFL} a ${maxFL}` :
+                  maxFL ? `Níveis: topo ${maxFL}` :
+                  minFL ? `Níveis: base ${minFL}` : '';
 
                 const fallbackDesc = [
                   obsFcst && `(${obsFcst})`,
                   intensity && `Intensidade: ${intensity}`,
-                  (minFL || maxFL) && `Níveis: ${minFL ? `base FL${minFL}` : ''}${minFL && maxFL ? ' a ' : ''}${maxFL ? `topo FL${maxFL}` : ''}`,
+                  levels,
                   (movement || speed) && `Movimento: ${movement}${speed ? ` ${speed} kt` : ''}`,
                 ].filter(Boolean).join(' • ');
 
@@ -278,7 +337,7 @@ export default function MetarPage(){
                     <div className="flex items-center justify-between">
                       <div className="font-semibold">{haz} — {fir}</div>
                       <div className="text-xs opacity-70">
-                        {from ? new Date(from).toLocaleString() : ''} {from || to ? '→' : ''} {to ? new Date(to).toLocaleString() : ''}
+                        {fromISO ? new Date(fromISO).toLocaleString('pt-BR', { hour12:false }) : ''} {fromISO || toISO ? '→' : ''} {toISO ? new Date(toISO).toLocaleString('pt-BR', { hour12:false }) : ''}
                       </div>
                     </div>
                     <div className="mt-1 text-xs opacity-90 whitespace-pre-wrap">
