@@ -6,7 +6,7 @@ export const revalidate = 120;
 const BR_FIRS = ['SBAZ', 'SBBS', 'SBRE', 'SBCW']; // Amazônica, Brasília, Recife, Curitiba
 
 export async function GET() {
-  // 1) Novo endpoint (GeoJSON)
+  // 1) Tenta endpoint novo (GeoJSON)
   const urlNew = 'https://aviationweather.gov/api/data/isigmet?format=geojson';
 
   try {
@@ -29,12 +29,11 @@ export async function GET() {
       });
     }
   } catch {
-    // continua no fallback
+    // segue para fallback
   }
 
-  // 2) Fallback ADDS: GeoJSON de SIGMET
-  const urlAdds =
-    'https://aviationweather.gov/adds/dataserver_current/httpparam?datasource=sigmet&requestType=retrieve&format=GEOJSON';
+  // 2) Fallback: ADDS GeoJSON
+  const urlAdds = 'https://aviationweather.gov/adds/dataserver_current/httpparam?datasource=sigmet&requestType=retrieve&format=GEOJSON';
 
   const resAdds = await fetch(urlAdds, {
     headers: { 'User-Agent': 'LuzesDoAbismo/Blog (sigmet proxy)' },
