@@ -1,3 +1,4 @@
+// app/news/page.tsx
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { list } from '@vercel/blob';
@@ -32,6 +33,7 @@ async function loadNews(): Promise<NewsItem[]> {
     const r = await fetch(it.url, { cache: 'no-store' });
     if (!r.ok) return [];
     const items = (await r.json()) as NewsItem[];
+
     // ordenar: data desc, depois id desc
     return items.slice().sort((a, b) => {
       const ad = new Date(a.date).getTime();
@@ -50,17 +52,14 @@ export default async function NewsPage() {
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* HERO: metade esquerda texto, metade direita GIF */}
+      {/* HERO: metade esquerda texto, metade direita GIF (sem botão) */}
       <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg min-h-[150px] border border-white/10">
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Notícias</h1>
-            <p className="opacity-75">Atualizações e matérias selecionadas (priorizando resumos em PT-BR via IA).</p>
-            <div className="mt-3">
-              <form action="/api/news/ingest" method="GET" target="_blank">
-                <button className="btn btn-sm">Atualizar agora</button>
-              </form>
-            </div>
+            <p className="opacity-75">
+              Atualizações automáticas e matérias selecionadas (priorizando resumos em PT-BR via IA).
+            </p>
           </div>
           <div className="pointer-events-none w-40 md:w-56 opacity-70">
             <img
@@ -84,7 +83,10 @@ export default async function NewsPage() {
             const scoreTxt = typeof score === 'number' ? `${Math.round(score * 100)}%` : undefined;
 
             return (
-              <article key={n.id} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col border border-white/10">
+              <article
+                key={n.id}
+                className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col border border-white/10"
+              >
                 <div className="flex items-start gap-2 mb-2">
                   <img
                     src="/media/brknews.gif"
@@ -107,7 +109,9 @@ export default async function NewsPage() {
                 <div className="text-xs opacity-70 flex items-center gap-2">
                   <span>{dateStr}</span>
                   {(n as any).source && <span>• {(n as any).source}</span>}
-                  {scoreTxt && <span className="ml-auto rounded bg-white/10 px-2 py-0.5">{scoreTxt}</span>}
+                  {scoreTxt && (
+                    <span className="ml-auto rounded bg-white/10 px-2 py-0.5">{scoreTxt}</span>
+                  )}
                 </div>
 
                 {n.image && (
@@ -130,7 +134,10 @@ export default async function NewsPage() {
                 {Array.isArray((n as any).tags) && (n as any).tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1">
                     {(n as any).tags.map((t: string) => (
-                      <span key={t} className="px-2 py-0.5 rounded bg-white/10 text-[11px] tracking-wide uppercase">
+                      <span
+                        key={t}
+                        className="px-2 py-0.5 rounded bg-white/10 text-[11px] tracking-wide uppercase"
+                      >
                         {t}
                       </span>
                     ))}
