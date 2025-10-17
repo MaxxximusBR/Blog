@@ -2,19 +2,24 @@ name: News Ingest (every 30 min)
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # a cada 30 min (UTC)
-  workflow_dispatch:         # botão "Run workflow" manual
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
 
 jobs:
   ping-ingest:
     runs-on: ubuntu-latest
     steps:
-      - name: Call /api/news/ingest (prod)
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
+      - name: Call /api/news/ingest
+        shell: bash
         run: |
-          if [ -z "$SITE_URL" ]; then
-            echo "Missing secret SITE_URL"; exit 1
-          fi
-          echo "Pinging: $SITE_URL/api/news/ingest"
-          curl -sS -f "$SITE_URL/api/news/ingest" || exit 1
+          set -e
+          URL="${{ secrets.SITE_URL }}/api/news/ingest"
+          echo "GET $URL"
+          # salva corpo em out.json e captura status
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -o out.json "$URL" || echo "000")
+          echo "HTTP $HTTP_CODE"
+          echo "----- body -----"
+          cat out.json || true
+          echo "----------------"
+          # Não falha o job se der 4xx/5xx (somente loga)
+          exit 0
