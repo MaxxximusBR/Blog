@@ -1,5 +1,4 @@
 name: News Auto-Promote (every 60 min)
-
 on:
   schedule:
     - cron: "0 * * * *"
@@ -9,39 +8,53 @@ jobs:
   auto-promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Pick last robot item & POST /api/news/promote
-        shell: bash
+      - name: Fetch robot index
+        id: grab
         run: |
-          set -e
-          BASE="${{ secrets.SITE_URL }}"
-          ROBOT_INDEX="$BASE/api/news/robot-index" # fallback simples
-          # =====
-          # Se você NÃO tem /api/news/robot-index, use diretamente o blob público:
-          # ROBOT_INDEX="https://<SEU-ENDPOINT-DE-BLOB>/news/uap/index.json"
-          # =====
+          set -euo pipefail
+          URL="${{ secrets.SITE_URL }}/api/news/ingest"  # acorda o robô
+          curl -fsS -m 30 "$URL" || true
 
-          echo "GET $ROBOT_INDEX"
-          HTTP=$(curl -sS -w "%{http_code}" -o robot.json "$ROBOT_INDEX" || echo "000")
-          echo "HTTP $HTTP (robot-index)"
-          cat robot.json || true
-          echo
+          ROBOT="${{ secrets.SITE_URL }}/api/news/robot-index" || true
+          # Se você não tem /api/news/robot-index, use diretamente o Blob público:
+          ROBOT_BLOB="$(curl -fsSL "${{ secrets.SITE_URL }}/api/news/ingest?emitIndex=1" || true)"
+          echo "Robot index helper (se existir): $ROBOT"
+          echo "EmitIndex (se existir): $ROBOT_BLOB"
 
-          # tenta extrair um sourceUrl; se não tiver, termina limpo
-          SRC=$(jq -r '.items[0].url // empty' robot.json 2>/dev/null || true)
-          if [ -z "$SRC" ]; then
-            echo "Sem sourceUrl para promover (ok)."
+      - name: Promote last N items (direct from Blob)
+        env:
+          SITE: ${{ secrets.SITE_URL }}
+          TOKEN: ${{ secrets.NEWS_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Baixa o índice do robô direto no Blob
+          ROBOT_INDEX_URL="$(curl -fsSL "$SITE/api/news/where-is-robot-index" || true)"
+          if [ -z "$ROBOT_INDEX_URL" ]; then
+            # fallback: construa manualmente a URL pública do seu Blob para news/uap/index.json
+            # Ex.: https://<seu-bucket>.public.blob.vercel-storage.com/news/uap/index.json
+            echo ">> Configure a URL pública do news/uap/index.json"
             exit 0
           fi
 
-          echo "Promovendo: $SRC"
-          RESP_CODE=$(curl -sS -w "%{http_code}" -o resp.json \
-            -H "Authorization: Bearer ${{ secrets.NEWS_ADMIN_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"sourceUrl\": \"$SRC\"}" \
-            "$BASE/api/news/promote" || echo "000")
+          echo "Robot index: $ROBOT_INDEX_URL"
+          json="$(curl -fsSL "$ROBOT_INDEX_URL")" || { echo "Falha ao ler robot index"; exit 1; }
 
-          echo "HTTP $RESP_CODE (promote)"
-          cat resp.json || true
-          echo
-          # Não falha o job por 4xx/5xx
-          exit 0
+          # Extrai até 10 URLs usando Node (evita depender de jq)
+          urls=$(node -e "const j=JSON.parse(process.argv[1]||'{}');const a=(j.items||[]).map(i=>i.url).filter(Boolean).slice(0,10);console.log(a.join('\n'))" "$json")
+
+          echo ">> Itens a promover:"
+          echo "$urls"
+
+          i=0
+          while IFS= read -r u; do
+            [ -z "$u" ] && continue
+            echo "POST $u"
+            curl -fsS -X POST "$SITE/api/news/promote" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"sourceUrl\":\"$u\"}" \
+              || { echo "Falha em $u"; exit 22; }
+            i=$((i+1))
+          done <<< "$urls"
+
+          echo "Promovidos: $i"
