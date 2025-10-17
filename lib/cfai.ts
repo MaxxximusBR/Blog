@@ -1,23 +1,26 @@
 // lib/cfai.ts
+// Cliente Cloudflare Workers AI + helpers prontos com os NOMES que você importou
+
 const CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID ?? '';
 const CF_API_TOKEN  = process.env.CF_API_TOKEN ?? '';
-const CF_AI_GATEWAY = process.env.CF_AI_GATEWAY ?? ''; // opcional
+const CF_AI_GATEWAY = process.env.CF_AI_GATEWAY ?? ''; // opcional: AI Gateway
 const DEFAULT_MODEL = process.env.CF_AI_MODEL_SUMMARY ?? '@cf/meta/llama-3.1-8b-instruct';
 
 function cfBaseUrl(model: string) {
-  // usa AI Gateway se configurado (melhor métricas/caching na Cloudflare)
   if (CF_AI_GATEWAY) {
     return `https://gateway.ai.cloudflare.com/v1/${CF_ACCOUNT_ID}/${CF_AI_GATEWAY}/workers-ai/${model}`;
   }
   return `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/${model}`;
 }
 
-export async function cfChat(messages: Array<{role:'system'|'user'|'assistant', content:string}>, model = DEFAULT_MODEL) {
+export async function cfChat(
+  messages: Array<{ role: 'system'|'user'|'assistant'; content: string }>,
+  model = DEFAULT_MODEL
+) {
   if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
-    return { ok:false as const, error:'CF env missing', text:'' };
+    return { ok: false as const, error: 'CF env missing', text: '' };
   }
-  const url = cfBaseUrl(model);
-  const r = await fetch(url, {
+  const r = await fetch(cfBaseUrl(model), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${CF_API_TOKEN}`,
@@ -27,11 +30,10 @@ export async function cfChat(messages: Array<{role:'system'|'user'|'assistant', 
   });
 
   if (!r.ok) {
-    const txt = await r.text().catch(()=>'');
-    return { ok:false as const, error:`HTTP ${r.status} ${txt}`, text:'' };
+    const body = await r.text().catch(()=>'');
+    return { ok: false as const, error: `HTTP ${r.status} ${body}`, text: '' };
   }
   const js = await r.json().catch(()=>null);
-  // Workers AI normaliza como { result: { response/text } } dependendo do modelo;
   const text =
     js?.result?.response ??
     js?.result?.text ??
@@ -39,46 +41,83 @@ export async function cfChat(messages: Array<{role:'system'|'user'|'assistant', 
     js?.response ??
     '';
 
-  return { ok:true as const, text: String(text || '') };
+  return { ok: true as const, text: String(text || '') };
 }
 
-/** Resume/explica em PT-BR para leigo, com título e resumo curtos */
+// ---------- SUMÁRIO PT-BR ----------
 export async function summarizePT(input: string, targetWords = 90, model = DEFAULT_MODEL) {
-  const sys = `Você é um redator técnico que explica informações aeronáuticas e de UAPs para leigos, de forma clara e neutra, em português do Brasil.`;
+  const sys = `Você é um redator técnico que explica informações aeronáuticas e de UAPs para leigos, em PT-BR, com neutralidade.`;
   const usr = [
-    `Texto da notícia (pode conter inglês):`,
+    `Texto (pode conter inglês):`,
     input,
     ``,
     `Tarefa:`,
-    `1) Gere um TÍTULO em PT-BR (máx ~110 caracteres, sem clickbait).`,
-    `2) Gere um RESUMO em PT-BR para leigos (~${targetWords} palavras).`,
-    `3) Se houver termos técnicos, explique brevemente.`,
+    `1) TÍTULO PT-BR (máx ~110 chars, sem clickbait).`,
+    `2) RESUMO PT-BR (~${targetWords} palavras), claro para leigos.`,
     ``,
-    `Formato de saída (JSON válido em uma linha):`,
+    `Saída: JSON válido em uma linha:`,
     `{ "title": "...", "summary": "..." }`
   ].join('\n');
 
   const res = await cfChat(
     [
       { role: 'system', content: sys },
-      { role: 'user',   content: usr }
+      { role: 'user', content: usr }
     ],
     model
   );
-  if (!res.ok) return { ok:false as const, error:res.error, title:'', summary:'' };
+  if (!res.ok) return { ok: false as const, error: res.error, title: '', summary: '' };
 
   try {
-    const parsed = JSON.parse(res.text);
+    const o = JSON.parse(res.text);
     return {
       ok: true as const,
-      title:   String(parsed.title ?? '').trim(),
-      summary: String(parsed.summary ?? '').trim(),
+      title: String(o.title ?? '').trim(),
+      summary: String(o.summary ?? '').trim(),
     };
   } catch {
-    // fallback: tenta extrair do texto bruto
+    // fallback tosco
     const lines = res.text.split('\n').map(s=>s.trim()).filter(Boolean);
     const title = lines[0]?.replace(/^title\s*[:\-]\s*/i,'') ?? '';
     const summary = lines.slice(1).join(' ').trim();
-    return { ok:true as const, title, summary };
+    return { ok: true as const, title, summary };
+  }
+}
+
+// Alias com o nome que você já importou:
+export const cfSummarizePtBR = summarizePT;
+
+// ---------- CLASSIFICAÇÃO (tags) ----------
+export async function cfClassifyUAP(input: string, model = DEFAULT_MODEL) {
+  // Se não quiser classificar agora, devolve vazio sem erro quando CF não estiver configurado
+  if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
+    return { ok: false as const, error: 'CF env missing', tags: [] as string[] };
+  }
+
+  const sys = `Você classifica textos curtos sobre aviação/UAPs em etiquetas. Responda apenas JSON.`;
+  const usr = [
+    `Texto:`,
+    input,
+    ``,
+    `Tarefa: Retorne JSON com "tags": array de palavras curtas (sem espaços).`,
+    `Sugestões quando fizer sentido: ["UAP","UFO","Drone","Balloon","Military","Airspace","Radar","ATS","ATC","FAA","FAB","Aeronáutica","Meteorology","Astronomy"].`,
+    `Formato: {"tags":["..."]}`
+  ].join('\n');
+
+  const res = await cfChat(
+    [
+      { role: 'system', content: sys },
+      { role: 'user', content: usr }
+    ],
+    model
+  );
+  if (!res.ok) return { ok: false as const, error: res.error, tags: [] as string[] };
+
+  try {
+    const o = JSON.parse(res.text);
+    const tags: string[] = Array.isArray(o?.tags) ? o.tags.map((t:any)=>String(t)).slice(0, 8) : [];
+    return { ok: true as const, tags };
+  } catch {
+    return { ok: true as const, tags: [] as string[] };
   }
 }
