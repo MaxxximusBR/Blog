@@ -1,92 +1,120 @@
-// app/api/adsb/emergencies/route.ts
-import { NextResponse } from 'next/server';
-
 export const dynamic = 'force-dynamic';
 
-type Flight = { hex: string; flight: string | null };
+type Flight = { hex: string; flight: string };
 
-function pickFlightsFromAdsb(j: any): Flight[] {
-  // tar1090/aircraft.json -> { aircraft: [ { squawk, hex, flight, ... }, ... ] }
-  const arr = Array.isArray(j?.aircraft) ? j.aircraft : [];
-  return arr
-    .filter((a: any) => {
-      if (!a) return false;
-      const sq = (a.squawk ?? '').toString();
-      // aceita “7700” como string ou número:
-      return sq === '7700' || sq === '07600' || +sq === 7700;
-    })
-    .map((a: any) => ({
-      hex: String(a.hex || '').trim(),
-      flight: (a.flight ?? a.callsign ?? '').toString().trim() || null,
+function makeAbsolute(base: URL, maybeUrl: string): string {
+  try {
+    // absoluta? retorna do jeito que está
+    new URL(maybeUrl);
+    return maybeUrl;
+  } catch {
+    // relativa: monta a partir do origin da requisição
+    const p = maybeUrl.startsWith('/') ? maybeUrl.slice(1) : maybeUrl;
+    return `${base.origin}/${p}`;
+  }
+}
+
+function okJson(body: any, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+}
+
+/** tenta ler aircraft.json (tar1090/ADSB.fi) */
+async function fromAdsbJson(srcUrl: string) {
+  const r = await fetch(srcUrl, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`adsb_http_${r.status}`);
+  const j = await r.json();
+
+  // formatos possíveis: { aircraft: [...] } (tar1090) ou algo compatível
+  const arr: any[] = Array.isArray(j?.aircraft) ? j.aircraft : Array.isArray(j) ? j : [];
+  const emerg = arr.filter(a => String(a?.squawk || '') === '7700');
+
+  const flights: Flight[] = emerg.map(a => ({
+    hex: String(a?.hex || '').trim(),
+    flight: String(a?.flight || '').trim(),
+  }));
+  return flights;
+}
+
+/** fallback via seu /api/opensky (usa matriz states; squawk é o índice 14) */
+async function fromOpenSky(reqUrl: string) {
+  // latitude/longitude/radius opcionais via query (senão usa um bounding box neutro)
+  const u = new URL(reqUrl);
+  const lat = u.searchParams.get('lat') ?? '-15';
+  const lon = u.searchParams.get('lon') ?? '-55';
+  const r   = u.searchParams.get('r')   ?? '20';
+
+  const os = await fetch(`${u.origin}/api/opensky?lat=${lat}&lon=${lon}&r=${r}`, { cache: 'no-store' });
+  if (!os.ok) throw new Error(`opensky_http_${os.status}`);
+  const j = await os.json();
+
+  const flights: Flight[] = (j?.items || [])
+    .filter((s: any) => (s?.squawk ?? s?.[14]) === '7700') // compatibilidade com seu route atual
+    .map((s: any) => ({
+      hex: String(s?.hex ?? s?.[0] ?? '').trim(),
+      flight: String(s?.callsign ?? s?.[1] ?? '').trim(),
     }));
+
+  return flights;
 }
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const debug = url.searchParams.has('debug');
-  const demo  = url.searchParams.has('demo');
+  const now = Date.now();
+  const trace: any[] = [];
 
-  // Fonte principal: seu proxy interno para o ADSB (definido via env)
-  const ADSB_JSON = process.env.ADSB_JSON || '/api/adsb/upstream';
-
-  // --- DEMO curto, para testar a UI ---
-  if (demo) {
-    return NextResponse.json({
-      ok: true,
-      count: 1,
-      flights: [{ hex: 'abc123', flight: 'TEST7700' }],
-      source: 'demo',
-      ts: Date.now(),
-    });
-  }
-
-  const trace: any[] = []; // coletar diagnóstico quando ?debug=1
-
-  // 1) Tenta ADSB primeiro (única fonte obrigatória)
   try {
-    const r = await fetch(ADSB_JSON, { cache: 'no-store' });
-    trace.push({ step: 'adsb_fetch', status: r.status });
-    if (!r.ok) throw new Error(`ADSB ${r.status}`);
-    const j = await r.json();
-    const flights = pickFlightsFromAdsb(j);
-    trace.push({ step: 'adsb_parsed', flights: flights.length });
+    const url = new URL(req.url);
 
-    return NextResponse.json({
-      ok: true,
-      count: flights.length,
-      flights,
-      source: 'adsb',
-      ts: Date.now(),
-      ...(debug ? { trace } : {}),
-    });
+    // forçar demo
+    if (url.searchParams.get('demo') === '1') {
+      return okJson({
+        ok: true,
+        count: 1,
+        flights: [{ hex: 'abc123', flight: 'TEST7700' }],
+        source: 'demo',
+        ts: now,
+      });
+    }
+
+    // 1) tentativa: ADSB_JSON (aceita absoluta ou relativa)
+    const envSrc = process.env.ADSB_JSON || '';
+    let flights: Flight[] = [];
+    let used = '';
+
+    if (envSrc) {
+      const src = makeAbsolute(url, envSrc);
+      try {
+        flights = await fromAdsbJson(src);
+        used = 'adsb_json';
+        trace.push({ step: 'adsb_ok', took_ms: Date.now() - now, src });
+      } catch (e: any) {
+        trace.push({ step: 'adsb_error', error: String(e), src });
+      }
+    } else {
+      trace.push({ step: 'adsb_skip', reason: 'ADSB_JSON not set' });
+    }
+
+    // 2) fallback: OpenSky (se nada veio do ADSB)
+    if (!flights.length) {
+      try {
+        flights = await fromOpenSky(req.url);
+        used = 'opensky';
+        trace.push({ step: 'opensky_ok', took_ms: Date.now() - now });
+      } catch (e: any) {
+        trace.push({ step: 'opensky_error', error: String(e) });
+      }
+    }
+
+    // nada? retorna erro com trace (útil pra debug)
+    if (!flights.length) {
+      const body = { ok: false, error: 'All sources failed', trace };
+      return okJson(body, 500);
+    }
+
+    return okJson({ ok: true, count: flights.length, flights, source: used, ts: now });
   } catch (e: any) {
-    trace.push({ step: 'adsb_error', error: String(e?.message || e) });
+    return okJson({ ok: false, error: e?.message || 'internal' }, 500);
   }
-
-  // 2) (Opcional) Se quiser manter OpenSky como fallback, descomente abaixo:
-  // try {
-  //   const r = await fetch(
-  //     `${process.env.NEXT_PUBLIC_ORIGIN ?? ''}/api/opensky?lat=-30.03&lon=-51.22&r=5`,
-  //     { cache: 'no-store' }
-  //   );
-  //   trace.push({ step: 'opensky_fetch', status: r.status });
-  //   if (r.ok) {
-  //     const j = await r.json();
-  //     // OpenSky não tem squawk nesta sua rota; normalmente não serve para 7700.
-  //   } else {
-  //     throw new Error(`OpenSky ${r.status}`);
-  //   }
-  // } catch (e: any) {
-  //   trace.push({ step: 'opensky_error', error: String(e?.message || e) });
-  // }
-
-  // Se chegou aqui, falhou todas as fontes
-  return NextResponse.json(
-    {
-      ok: false,
-      error: 'All sources failed',
-      ...(debug ? { trace } : {}),
-    },
-    { status: 500 }
-  );
 }
