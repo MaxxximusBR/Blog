@@ -11,23 +11,20 @@ export const dynamic = 'force-dynamic';
 
 type NewsItem = {
   id: string;
-  date: string;        // YYYY-MM-DD (ou ISO conv.)
-  title: string;
-  url: string;         // link externo
-  image?: string;      // opcional
-  summary?: string;    // opcional
-  _auto?: boolean;     // marca se veio do robô (não persiste no blob do admin)
+  date: string;   // YYYY-MM-DD ou ISO
+  title?: string;
+  title_ai?: string;
+  url: string;    // link externo
+  image?: string;
+  summary?: string;
+  summary_ai?: string;
+  tags?: string[];            // opcional (IA)
+  relevance_note?: string;    // opcional (IA)
+  relevance_score?: number;   // opcional (IA)
+  source?: string;            // opcional (robô)
 };
 
-/** Util: normaliza data para YYYY-MM-DD (pt-BR safe) */
-function toYmd(d: string | Date): string {
-  const dt = typeof d === 'string' ? new Date(d) : d;
-  if (Number.isNaN(dt.getTime())) return new Date().toISOString().slice(0,10);
-  return dt.toISOString().slice(0,10);
-}
-
-/** Carrega índice do ADMIN (seu formato atual) em indexes/news.json */
-async function loadAdminNews(): Promise<NewsItem[]> {
+async function loadNews(): Promise<NewsItem[]> {
   try {
     const L = await list({ prefix: 'indexes/' });
     const it = (L.blobs as any[]).find(b => b.pathname === 'indexes/news.json');
@@ -35,88 +32,43 @@ async function loadAdminNews(): Promise<NewsItem[]> {
     const r = await fetch(it.url, { cache: 'no-store' });
     if (!r.ok) return [];
     const items = (await r.json()) as NewsItem[];
-    return items.map(n => ({
-      ...n,
-      date: toYmd(n.date),
-      _auto: false,
-    }));
+    // ordenar: data desc, depois id desc
+    return items.slice().sort((a, b) => {
+      const ad = new Date(a.date).getTime();
+      const bd = new Date(b.date).getTime();
+      if (ad < bd) return 1;
+      if (ad > bd) return -1;
+      return (a.id || '').localeCompare(b.id || '') * -1;
+    });
   } catch {
     return [];
   }
-}
-
-/** Carrega índice do ROBÔ (UAP) e transforma para NewsItem */
-async function loadBotNews(): Promise<NewsItem[]> {
-  try {
-    // acha o index do robô (news/uap/index.json)
-    const LI = await list({ prefix: 'news/uap/' });
-    const idx = (LI.blobs as any[]).find(b => b.pathname.endsWith('news/uap/index.json'));
-    if (!idx?.url) return [];
-
-    const res = await fetch(idx.url, { cache: 'no-store' });
-    if (!res.ok) return [];
-    const j = await res.json();
-    const items: { url: string }[] = Array.isArray(j?.items) ? j.items : [];
-
-    // baixa cada item JSON e converte
-    const cards = await Promise.all(items.slice(0, 40).map(async (it) => {
-      try {
-        const r = await fetch(it.url, { cache: 'no-store' });
-        if (!r.ok) return null;
-        const obj = await r.json();
-        // o robô grava payload com estes campos:
-        // { id, url, source, published_at, title, summary, title_ai, summary_ai, image_url, author, topics, ... }
-        const title = obj.title_ai || obj.title || 'Sem título';
-        const summary = obj.summary_ai || obj.summary || '';
-        const image = obj.image_url || undefined;
-        const date = toYmd(obj.published_at || obj.created_at || new Date());
-        const id = obj.id || `${Date.now()}-${Math.random()}`;
-        return { id, date, title, url: obj.url, image, summary, _auto: true } as NewsItem;
-      } catch {
-        return null;
-      }
-    }));
-
-    return cards.filter(Boolean) as NewsItem[];
-  } catch {
-    return [];
-  }
-}
-
-/** Mescla, deduplica por URL, ordena por data desc (depois id desc) */
-function mergeNews(a: NewsItem[], b: NewsItem[]): NewsItem[] {
-  const map = new Map<string, NewsItem>(); // chave = url
-  for (const it of [...a, ...b]) {
-    if (!it?.url) continue;
-    if (!map.has(it.url)) map.set(it.url, it);
-  }
-  const all = Array.from(map.values());
-  all.sort((x, y) => {
-    if (x.date < y.date) return 1;
-    if (x.date > y.date) return -1;
-    return (x.id < y.id) ? 1 : -1;
-  });
-  return all;
 }
 
 export default async function NewsPage() {
-  const [adminItems, botItems] = await Promise.all([loadAdminNews(), loadBotNews()]);
-  const items = mergeNews(adminItems, botItems).slice(0, 36);
+  const items = await loadNews();
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
       {/* HERO: metade esquerda texto, metade direita GIF */}
-      <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg min-h-[150px]">
-        <div className="relative z-10">
-          <h1 className="text-2xl font-semibold">Notícias</h1>
-          <p className="opacity-75">Atualizações e matérias selecionadas. (OVNI / UAP)</p>
-        </div>
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2">
-          <img
-            src="/media/brknews.gif"
-            alt=""
-            className="w-full h-full object-contain object-right opacity-70 select-none"
-          />
+      <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg min-h-[150px] border border-white/10">
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Notícias</h1>
+            <p className="opacity-75">Atualizações e matérias selecionadas (priorizando resumos em PT-BR via IA).</p>
+            <div className="mt-3">
+              <form action="/api/news/ingest" method="GET" target="_blank">
+                <button className="btn btn-sm">Atualizar agora</button>
+              </form>
+            </div>
+          </div>
+          <div className="pointer-events-none w-40 md:w-56 opacity-70">
+            <img
+              src="/media/brknews.gif"
+              alt=""
+              className="w-full h-auto object-contain select-none"
+            />
+          </div>
         </div>
       </section>
 
@@ -124,61 +76,75 @@ export default async function NewsPage() {
         <div className="opacity-70">Nenhuma notícia publicada.</div>
       ) : (
         <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((n) => (
-            <article key={n.id} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col border border-white/10">
-              <div className="flex items-start gap-2 mb-2">
-                <img
-                  src="/media/brknews.gif"
-                  alt="Breaking News"
-                  width={32}
-                  height={32}
-                  className="mt-0.5 shrink-0"
-                />
-                <div className="min-w-0">
+          {items.map((n) => {
+            const shownTitle = (n as any).title_ai ?? n.title ?? '(sem título)';
+            const shownSummary = (n as any).summary_ai ?? n.summary ?? '';
+            const dateStr = n.date ? new Date(n.date).toLocaleDateString('pt-BR') : '';
+            const score = (n as any).relevance_score as number | undefined;
+            const scoreTxt = typeof score === 'number' ? `${Math.round(score * 100)}%` : undefined;
+
+            return (
+              <article key={n.id} className="rounded-2xl bg-[#0e1624] p-5 shadow-lg flex flex-col border border-white/10">
+                <div className="flex items-start gap-2 mb-2">
+                  <img
+                    src="/media/brknews.gif"
+                    alt="Breaking News"
+                    width={32}
+                    height={32}
+                    className="mt-0.5 shrink-0"
+                  />
                   <Link
                     href={n.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-semibold leading-snug hover:underline"
+                    title={n.title && n.title !== shownTitle ? n.title : shownTitle}
                   >
-                    {n.title}
+                    {shownTitle}
                   </Link>
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="text-xs opacity-70">
-                      {new Date(n.date).toLocaleDateString('pt-BR')}
-                    </div>
-                    {n._auto && (
-                      <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/20 text-emerald-300">
-                        OVNI / UAP (auto)
-                      </span>
-                    )}
-                  </div>
                 </div>
-              </div>
 
-              {n.image && (
-                <img
-                  src={n.image}
-                  alt=""
-                  className="rounded-lg mt-3 border border-white/10"
-                  loading="lazy"
-                />
-              )}
+                <div className="text-xs opacity-70 flex items-center gap-2">
+                  <span>{dateStr}</span>
+                  {(n as any).source && <span>• {(n as any).source}</span>}
+                  {scoreTxt && <span className="ml-auto rounded bg-white/10 px-2 py-0.5">{scoreTxt}</span>}
+                </div>
 
-              {/* RESUMO COMPLETO — sem truncar */}
-              {n.summary && (
-                <p className="text-sm opacity-90 mt-3 whitespace-pre-wrap break-words">
-                  {n.summary}
-                </p>
-              )}
+                {n.image && (
+                  <img
+                    src={n.image}
+                    alt=""
+                    className="rounded-lg mt-3 border border-white/10"
+                    loading="lazy"
+                  />
+                )}
 
-              <div className="mt-auto pt-4">
-                <Link href={n.url} target="_blank" rel="noopener noreferrer" className="btn">
-                  Ler na fonte
-                </Link>
-              </div>
-            </article>
-          ))}
+                {/* RESUMO COMPLETO — sem truncar */}
+                {shownSummary && (
+                  <p className="text-sm opacity-90 mt-3 whitespace-pre-wrap break-words">
+                    {shownSummary}
+                  </p>
+                )}
+
+                {/* tags AI */}
+                {Array.isArray((n as any).tags) && (n as any).tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {(n as any).tags.map((t: string) => (
+                      <span key={t} className="px-2 py-0.5 rounded bg-white/10 text-[11px] tracking-wide uppercase">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-auto pt-4">
+                  <Link href={n.url} target="_blank" rel="noopener noreferrer" className="btn">
+                    Ler na fonte
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </section>
       )}
     </main>
