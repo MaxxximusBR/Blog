@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { list, put } from '@vercel/blob';
 
-Authorization: Bearer b6c0e1fa1b7f4a0f9a3f7d51c6b9e1c9c9a2f8b2f4d3e1a0b7c6d5e4f3a2b1c
-
 const INDEX_PATH = 'indexes/news.json'; // índice oficial já usado pela sua página
 const MAX_INDEX = 500;                  // tamanho máximo do índice
 
@@ -33,24 +31,22 @@ async function writeIndex(items: any[]) {
 }
 
 type PromoteBody = {
-  /** URL pública do JSON do robô (ex.: news/uap/items/YYYY-MM-DD/<id>.json) */
-  sourceUrl?: string;
-  /** Alternativa ao sourceUrl: passe o objeto direto (mesma estrutura gravada pelo robô) */
-  sourceObject?: any;
+  sourceUrl?: string;     // URL pública do JSON do robô
+  sourceObject?: any;     // alternativa: objeto direto
 
-  /** Overrides/edições opcionais para o índice oficial */
+  // Overrides opcionais
   title?: string;
   summary?: string;
   image?: string;
   url?: string;
-  date?: string; // YYYY-MM-DD ou ISO
+  date?: string;          // YYYY-MM-DD ou ISO
 };
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function POST(req: Request) {
-  // --- auth simples por bearer token
+  // --- auth por Bearer token
   const auth = req.headers.get('authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token || token !== process.env.NEWS_ADMIN_TOKEN) {
@@ -60,7 +56,7 @@ export async function POST(req: Request) {
   let body: PromoteBody;
   try { body = await req.json(); } catch { return NextResponse.json({ ok:false, error:'bad json' }, { status: 400 }); }
 
-  // 1) obter o objeto-fonte (do robô)
+  // 1) Obter objeto-fonte
   let src: any = null;
   try {
     if (body.sourceObject) {
@@ -76,8 +72,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok:false, error:`source error: ${e.message || e}` }, { status: 400 });
   }
 
-  // 2) mapear para o formato do seu índice oficial
-  // Robô salva: { id, url, published_at, title, summary, title_ai, summary_ai, image_url, ... }
+  // 2) Mapear para o formato do índice oficial
   const title = body.title ?? src.title_ai ?? src.title ?? 'Sem título';
   const summary = body.summary ?? src.summary_ai ?? src.summary ?? '';
   const link = body.url ?? src.url ?? '';
@@ -89,24 +84,16 @@ export async function POST(req: Request) {
   }
   const id = (src.id && typeof src.id === 'string') ? src.id : sha1(`${link}-${date}`);
 
-  const promoted = {
-    id,
-    date,
-    title,
-    url: link,
-    image,
-    summary,
-  };
+  const promoted = { id, date, title, url: link, image, summary };
 
-  // 3) ler índice atual, deduplicar por URL e gravar de volta
+  // 3) Ler índice atual, deduplicar por URL e gravar
   const current = await readIndex();
   const dedup = new Map<string, any>();
   for (const it of current) {
     if (it?.url) dedup.set(it.url, it);
   }
-  dedup.set(promoted.url, promoted); // substitui se já existir
+  dedup.set(promoted.url, promoted);
 
-  // ordenar por data desc, depois id desc
   const merged = Array.from(dedup.values()).sort((a:any, b:any) => {
     if (a.date < b.date) return 1;
     if (a.date > b.date) return -1;
