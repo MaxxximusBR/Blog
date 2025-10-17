@@ -4,18 +4,15 @@ import { NextResponse } from 'next/server';
 type Tar1090Aircraft = {
   hex?: string;
   flight?: string;
-  squawk?: string;
-  r?: string; // às vezes "r" vem como callsign
+  squawk?: string;       // tar1090 costuma entregar string
+  r?: string;            // às vezes callsign vem em "r"
   [k: string]: any;
 };
 
 const DEF_SOURCES = [
-  // Tente primeiro o que você definir em ADSB_JSON (pode ser sua instância tar1090)
-  process.env.ADSB_JSON?.trim(),
-  // Tente o padrão do ADSB.fi (pode dar 403 em alguns provedores)
-  'https://globe.adsb.fi/data/aircraft.json',
-  // Coloque aqui mirrors alternativos, se tiver:
-  // 'https://SEU-MIRROR/data/aircraft.json',
+  process.env.ADSB_JSON?.trim(),                     // sua instância/mirror (opção preferida)
+  'https://globe.adsb.fi/data/aircraft.json',        // fallback (pode dar 403)
+  // adicione mais mirrors aqui se quiser
 ].filter(Boolean) as string[];
 
 function pickCallsign(a: Tar1090Aircraft) {
@@ -30,7 +27,7 @@ export async function GET(req: Request) {
   try {
     const u = new URL(req.url);
 
-    // Modo DEMO para testar o badge na UI: /api/adsb/emergencies?demo=1
+    // Modo DEMO para testar a UI: /api/adsb/emergencies?demo=1
     if (u.searchParams.get('demo') === '1') {
       return NextResponse.json({
         ok: true,
@@ -49,7 +46,6 @@ export async function GET(req: Request) {
       'User-Agent':
         'OVNIS2025/1.0 (+https://github.com/) Mozilla/5.0; Vercel/Next.js',
       'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-      // alguns CDNs exigem um referer plausível
       'Referer': 'https://globe.adsb.fi/',
     };
 
@@ -62,12 +58,12 @@ export async function GET(req: Request) {
           lastErr = `HTTP ${r.status}`;
           continue;
         }
-        const j = (await r.json()) as { aircraft?: Tar1090Aircraft[] };
 
+        const j = (await r.json()) as { aircraft?: Tar1090Aircraft[] };
         const ac = Array.isArray(j?.aircraft) ? j.aircraft : [];
-        const emerg = ac.filter(
-          (a) => a?.squawk === '7700' || a?.squawk === 7700
-        );
+
+        // ✅ corrige o erro de tipos: força comparação como string
+        const emerg = ac.filter((a) => String(a?.squawk) === '7700');
 
         const flights = emerg.map((a) => ({
           hex: a.hex,
