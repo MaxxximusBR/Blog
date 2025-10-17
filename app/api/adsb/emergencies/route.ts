@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
   // 2) fallback: seu route de OpenSky (Brasil central como exemplo)
   //    ajuste os valores se quiser outro centro/raio.
-  const openskyLocal = new URL('/opensky', url.origin); // <- use o caminho real onde seu route está
+  const openskyLocal = new URL('/api/opensky', url.origin); // <- use o caminho real onde seu route está
   openskyLocal.searchParams.set('lat', '-14.2'); // centro aproximado BR
   openskyLocal.searchParams.set('lon', '-51.9');
   openskyLocal.searchParams.set('r', '20');      // raio "grande" (~20º) para cobrir o país
