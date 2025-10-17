@@ -21,11 +21,11 @@ async function promoteAction(formData: FormData) {
   if (url)     body.url = url;
   if (date)    body.date = date;
 
-  const r = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/news/promote`, {
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? '';
+  const r = await fetch(`${site}/api/news/promote`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      // usa o token do servidor; não vaza para o cliente
       'Authorization': `Bearer ${process.env.NEWS_ADMIN_TOKEN ?? ''}`,
     },
     body: JSON.stringify(body),
@@ -35,7 +35,6 @@ async function promoteAction(formData: FormData) {
   const json = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, error: json?.error || `HTTP ${r.status}` };
 
-  // opcional: revalidar a página de notícias
   revalidatePath('/news');
   return { ok: true, data: json };
 }
@@ -65,7 +64,7 @@ export default function AdminPromotePage() {
       </form>
 
       <p className="hint text-xs">
-        Dica: o <code>sourceUrl</code> está em <code>news/uap/index.json</code> no Blob (campo <code>items[].url</code>).
+        Dica: o <code>sourceUrl</code> fica em <code>news/uap/index.json</code> (campo <code>items[].url</code>) no Blob.
       </p>
     </main>
   );
