@@ -2,18 +2,46 @@ name: News Auto-Promote (every 60 min)
 
 on:
   schedule:
-    - cron: "0 * * * *"  # a cada hora no minuto 0
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
   auto-promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Rebuild curated index
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          NEWS_ADMIN_TOKEN: ${{ secrets.NEWS_ADMIN_TOKEN }}
+      - name: Pick last robot item & POST /api/news/promote
+        shell: bash
         run: |
-          echo "Rebuilding curated news index..."
-          curl -fsS -H "Authorization: Bearer ${NEWS_ADMIN_TOKEN}" \
-            "${SITE_URL}/api/news/promote" || exit 1
+          set -e
+          BASE="${{ secrets.SITE_URL }}"
+          ROBOT_INDEX="$BASE/api/news/robot-index" # fallback simples
+          # =====
+          # Se você NÃO tem /api/news/robot-index, use diretamente o blob público:
+          # ROBOT_INDEX="https://<SEU-ENDPOINT-DE-BLOB>/news/uap/index.json"
+          # =====
+
+          echo "GET $ROBOT_INDEX"
+          HTTP=$(curl -sS -w "%{http_code}" -o robot.json "$ROBOT_INDEX" || echo "000")
+          echo "HTTP $HTTP (robot-index)"
+          cat robot.json || true
+          echo
+
+          # tenta extrair um sourceUrl; se não tiver, termina limpo
+          SRC=$(jq -r '.items[0].url // empty' robot.json 2>/dev/null || true)
+          if [ -z "$SRC" ]; then
+            echo "Sem sourceUrl para promover (ok)."
+            exit 0
+          fi
+
+          echo "Promovendo: $SRC"
+          RESP_CODE=$(curl -sS -w "%{http_code}" -o resp.json \
+            -H "Authorization: Bearer ${{ secrets.NEWS_ADMIN_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"sourceUrl\": \"$SRC\"}" \
+            "$BASE/api/news/promote" || echo "000")
+
+          echo "HTTP $RESP_CODE (promote)"
+          cat resp.json || true
+          echo
+          # Não falha o job por 4xx/5xx
+          exit 0
