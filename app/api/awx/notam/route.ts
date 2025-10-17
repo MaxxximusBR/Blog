@@ -1,8 +1,12 @@
-// app/api/awx/notam/route.ts
 import { NextResponse } from 'next/server';
 
-const AWC_BASE =
-  process.env.AWC_BASE?.replace(/\/+$/, '') || 'https://aviationweather.gov';
+const AWC_BASE = process.env.AWC_BASE?.replace(/\/+$/, '') || 'https://aviationweather.gov';
+
+// ICAOs BR “maiores” para fallback ADDS quando só vem FIR
+const DEFAULT_BR_ICAOS = [
+  'SBGR','SBSP','SBRJ','SBGL','SBBR','SBCF','SBPA','SBFL','SBCT','SBRF',
+  'SBSV','SBEG','SBMO','SBBE','SBBH','SBSG','SBFZ','SBRP','SBCG','SBSJ',
+];
 
 type NotamOut = {
   id: string;
@@ -14,7 +18,6 @@ type NotamOut = {
   source: 'AWC' | 'ADDS';
 };
 
-// util: normaliza tempo para ISO (aceita epoch s/ms, ISO, num-string)
 function toISO(x: any): string | null {
   if (x == null || x === '') return null;
   if (typeof x === 'number') {
@@ -42,24 +45,15 @@ export const revalidate = 0;
 export async function GET(req: Request) {
   const url = new URL(req.url);
 
-  // Parâmetros
   const fir = (url.searchParams.get('fir') || '')
-    .split(',')
-    .map(s => s.trim().toUpperCase())
-    .filter(Boolean);
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
   const locations = (url.searchParams.get('locations') || url.searchParams.get('loc') || '')
-    .split(',')
-    .map(s => s.trim().toUpperCase())
-    .filter(Boolean);
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
   const hours = Math.max(1, Math.min(120, parseInt(url.searchParams.get('hours') || '24', 10)));
   const debug = url.searchParams.get('debug') === '1';
 
-  // Estratégia:
-  // 1) tentar AWC por locations (quando houver)
-  // 2) tentar AWC por FIR (quando houver)
-  // 3) fallback ADDS por locations (se ainda não houver itens)
   const headers = {
     'User-Agent': 'OVNIs2025/1.0 (+https://github.com/MaxxximusBR/Blog)',
     Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8',
@@ -69,19 +63,13 @@ export async function GET(req: Request) {
   const errors: string[] = [];
   let items: NotamOut[] = [];
 
-  // ------------------- AWC: por LOCATIONS -------------------
   async function awcByLocations(locs: string[]) {
     if (!locs.length) return;
-    const endpoint = `${AWC_BASE}/api/data/notam?format=geojson&locations=${encodeURIComponent(
-      locs.join(',')
-    )}&hours=${hours}`;
+    const endpoint = `${AWC_BASE}/api/data/notam?format=geojson&locations=${encodeURIComponent(locs.join(','))}&hours=${hours}`;
     try {
       const r = await fetch(endpoint, { cache: 'no-store', headers });
       tried.push({ url: endpoint, status: r.status, from: 'AWC' });
-      if (!r.ok) {
-        errors.push(`LOC: HTTP ${r.status}`);
-        return;
-      }
+      if (!r.ok) { errors.push(`LOC: HTTP ${r.status}`); return; }
       const json = await r.json();
       const feats = Array.isArray(json?.features) ? json.features : [];
       for (const f of feats) {
@@ -104,20 +92,13 @@ export async function GET(req: Request) {
     }
   }
 
-  // ------------------- AWC: por FIR -------------------
   async function awcByFir(firList: string[]) {
     for (const f of firList) {
-      // Variação mais comum/estável no AWC (quando está no ar)
-      const endpoint = `${AWC_BASE}/api/data/notam?format=geojson&firName=${encodeURIComponent(
-        f
-      )}&hours=${hours}`;
+      const endpoint = `${AWC_BASE}/api/data/notam?format=geojson&firName=${encodeURIComponent(f)}&hours=${hours}`;
       try {
         const r = await fetch(endpoint, { cache: 'no-store', headers });
         tried.push({ url: endpoint, status: r.status, from: 'AWC' });
-        if (!r.ok) {
-          errors.push(`FIR ${f}: HTTP ${r.status}`);
-          continue;
-        }
+        if (!r.ok) { errors.push(`FIR ${f}: HTTP ${r.status}`); continue; }
         const json = await r.json();
         const feats = Array.isArray(json?.features) ? json.features : [];
         for (const ft of feats) {
@@ -141,37 +122,24 @@ export async function GET(req: Request) {
     }
   }
 
-  // ------------------- ADDS (fallback): por LOCATIONS -------------------
   async function addsByLocations(locs: string[]) {
     if (!locs.length) return;
-    // ADDS Data Server entrega JSON estável de NOTAMs por estação (ICAO).
-    const endpoint = `https://aviationweather.gov/adds/dataserver_current/httpparam?datasource=notams&requestType=retrieve&format=JSON&stationString=${encodeURIComponent(
-      locs.join(',')
-    )}&mostRecentForEachStation=true&hoursBeforeNow=${hours}`;
+    const endpoint =
+      'https://aviationweather.gov/adds/dataserver_current/httpparam' +
+      `?datasource=notams&requestType=retrieve&format=JSON&stationString=${encodeURIComponent(locs.join(','))}` +
+      `&mostRecentForEachStation=true&hoursBeforeNow=${hours}`;
     try {
       const r = await fetch(endpoint, { cache: 'no-store', headers });
       tried.push({ url: endpoint, status: r.status, from: 'ADDS' });
-      if (!r.ok) {
-        errors.push(`ADDS LOC: HTTP ${r.status}`);
-        return;
-      }
+      if (!r.ok) { errors.push(`ADDS LOC: HTTP ${r.status}`); return; }
       const j = await r.json();
       const list = j?.data?.NOTAM || j?.data?.notam || [];
       for (const n of list) {
         const txt =
-          n?.rawtext ??
-          n?.raw_text ??
-          n?.text ??
-          n?.notam_text ??
-          n?.message ??
-          n?.remarks ??
-          '';
+          n?.rawtext ?? n?.raw_text ?? n?.text ?? n?.notam_text ?? n?.message ?? n?.remarks ?? '';
         if (!txt) continue;
         items.push({
-          id:
-            n?.id?.toString() ||
-            n?.notam_id?.toString() ||
-            `ADDS-${(n?.location ?? n?.station_id ?? '??')}-${txt.slice(0, 32)}`,
+          id: n?.id?.toString() || n?.notam_id?.toString() || `ADDS-${(n?.location ?? n?.station_id ?? '??')}-${txt.slice(0, 32)}`,
           fir: (n?.fir ?? n?.firname ?? '').toString().toUpperCase() || undefined,
           icao: (n?.location ?? n?.station_id ?? '').toString().toUpperCase() || undefined,
           text: txt.toString(),
@@ -186,12 +154,24 @@ export async function GET(req: Request) {
     }
   }
 
-  // Execução
+  // Fluxo
   if (locations.length) await awcByLocations(locations);
-  if (fir.length) await awcByFir(fir);
-  if (!items.length && locations.length) await addsByLocations(locations);
+  if (fir.length)        await awcByFir(fir);
 
-  // Dedup + ordenação
+  // Fallback ADDS:
+  //  a) se veio locations e ainda não temos itens
+  //  b) se veio só FIR e AWC não entregou nada -> usar default BR
+  if (!items.length) {
+    if (locations.length) {
+      await addsByLocations(locations);
+    } else if (fir.length) {
+      await addsByLocations(DEFAULT_BR_ICAOS);
+      // só para transparência do que aconteceu
+      errors.push('AWC/FIR indisponível — fallback ADDS com ICAOs padrão BR');
+    }
+  }
+
+  // Dedup e ordenação
   items = uniq(items, x => x.id);
   items.sort((a, b) => {
     const ta = a.start ? Date.parse(a.start) : 0;
@@ -199,27 +179,8 @@ export async function GET(req: Request) {
     return tb - ta;
   });
 
-  // resposta
   if (debug) {
-    return NextResponse.json({
-      ok: true,
-      count: items.length,
-      fir,
-      locations,
-      hours,
-      items,
-      tried,
-      errors,
-    });
+    return NextResponse.json({ ok: true, count: items.length, fir, locations, hours, items, tried, errors });
   }
-  return NextResponse.json({
-    ok: true,
-    count: items.length,
-    fir,
-    locations,
-    hours,
-    items,
-    // Para a UI mostrar mensagens curtas:
-    errors: errors.slice(0, 3),
-  });
+  return NextResponse.json({ ok: true, count: items.length, fir, locations, hours, items, errors: errors.slice(0,3) });
 }
