@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-// Você pode mudar essa fonte via variáveis de ambiente:
+// Configure via ENVs no Vercel se quiser outra instância:
+// ex.: https://seu-tar1090/data/aircraft.json
 const ADSB_JSON = process.env.ADSB_JSON || 'https://globe.adsb.fi/data/aircraft.json';
 
 export const dynamic = 'force-dynamic';
@@ -13,11 +14,9 @@ export async function GET() {
       return NextResponse.json({ ok: false, error: `HTTP ${r.status}` }, { status: 200 });
     }
     const j = await r.json();
-
-    // tar1090: { aircraft: [ { hex, flight, alt_baro, lat, lon, squawk, emergency, ... } ] }
     const arr = Array.isArray(j?.aircraft) ? j.aircraft : [];
-    const list = arr.filter((a: any) => a?.squawk === '7700' || a?.emergency);
 
+    const list = arr.filter((a: any) => a?.squawk === '7700' || a?.emergency);
     const flights = list.map((a: any) => ({
       hex: a?.hex,
       flight: (a?.flight || '').trim(),
