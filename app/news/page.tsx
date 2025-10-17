@@ -2,6 +2,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { list } from '@vercel/blob';
+import crypto from 'node:crypto';
 
 export const metadata: Metadata = {
   title: 'Notícias | Anuário OVNIs 2025',
@@ -12,73 +13,74 @@ export const dynamic = 'force-dynamic';
 
 type NewsItem = {
   id: string;
-  date: string;   // YYYY-MM-DD ou ISO
+  date: string;            // YYYY-MM-DD ou ISO
   title?: string;
   title_ai?: string;
-  url: string;    // link externo
+  url: string;             // link externo
   image?: string;
   summary?: string;
   summary_ai?: string;
-  tags?: string[];            // opcional (IA)
-  relevance_note?: string;    // opcional (IA)
-  relevance_score?: number;   // opcional (IA)
-  source?: string;            // opcional (robô)
+  tags?: string[];         // opcional (IA)
+  relevance_note?: string; // opcional (IA)
+  relevance_score?: number;// opcional (IA)
+  source?: string;         // opcional (robô)
 };
 
-async function loadNews(): Promise<NewsItem[]> {
-  // 1) tenta o índice oficial (usado pelo admin/promote)
+// ------- helpers -------
+async function fetchJson<T>(url: string) {
+  const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'nocache=' + Date.now(), {
+    cache: 'no-store',
+  });
+  if (!r.ok) throw new Error(String(r.status));
+  return (await r.json()) as T;
+}
+
+function toYmd(d: string | Date) {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return isNaN(dt.getTime()) ? new Date().toISOString().slice(0, 10) : dt.toISOString().slice(0, 10);
+}
+
+// Carrega o índice oficial (promovido pelo admin)
+async function loadOfficial(): Promise<NewsItem[]> {
   try {
     const L = await list({ prefix: 'indexes/' });
-    const it = (L.blobs as any[]).find(b => b.pathname === 'indexes/news.json');
-    if (it?.url) {
-      const r = await fetch(it.url, { cache: 'no-store' });
-      if (r.ok) {
-        const arr = (await r.json()) as NewsItem[];
-        if (Array.isArray(arr) && arr.length) {
-          return arr
-            .slice()
-            .sort((a, b) => {
-              const ad = new Date(a.date).getTime();
-              const bd = new Date(b.date).getTime();
-              if (ad < bd) return 1;
-              if (ad > bd) return -1;
-              return (a.id || '').localeCompare(b.id || '') * -1;
-            });
-        }
-      }
-    }
+    const it = (L.blobs as any[]).find((b) => b.pathname === 'indexes/news.json');
+    if (!it?.url) return [];
+    const arr = await fetchJson<NewsItem[]>(it.url);
+    if (!Array.isArray(arr)) return [];
+    // normaliza id/data
+    return arr
+      .map((n) => ({
+        ...n,
+        id: n.id || crypto.randomUUID(),
+        date: toYmd(n.date || new Date()),
+      }))
+      .filter((n) => !!n.url);
   } catch {
-    // cai para o fallback
+    return [];
   }
+}
 
-  // 2) FALLBACK: ler o índice do robô (news/uap/index.json) e montar os cards
+// Carrega o índice do robô (IA)
+async function loadRobot(limitItems = 24): Promise<NewsItem[]> {
   try {
-    const L2 = await list({ prefix: 'news/uap/' });
-    const idx = (L2.blobs as any[]).find(b => b.pathname === 'news/uap/index.json');
+    const L = await list({ prefix: 'news/uap/' });
+    const idx = (L.blobs as any[]).find((b) => b.pathname === 'news/uap/index.json');
     if (!idx?.url) return [];
 
-    const r2 = await fetch(idx.url, { cache: 'no-store' });
-    if (!r2.ok) return [];
+    const payload = await fetchJson<{ items?: { url: string }[] }>(idx.url);
+    const urls = Array.isArray(payload.items) ? payload.items.map((i) => i.url) : [];
+    const limited = urls.slice(0, limitItems);
 
-    const payload = (await r2.json()) as { items?: { url: string }[] };
-    const urls = Array.isArray(payload.items) ? payload.items.map(i => i.url) : [];
-
-    // baixa só os 18 mais recentes para não pesar o SSR
-    const limited = urls.slice(0, 18);
-    const items: NewsItem[] = [];
+    const out: NewsItem[] = [];
     for (const url of limited) {
       try {
-        const rr = await fetch(url, { cache: 'no-store' });
-        if (!rr.ok) continue;
-        const obj = await rr.json();
-
-        // mapeia o objeto do robô para o formato da página
+        const obj = await fetchJson<any>(url);
         const title = obj.title_ai || obj.title || '(sem título)';
         const summary = obj.summary_ai || obj.summary || '';
-        const date =
-          (obj.published_at || obj.created_at || new Date().toISOString()).slice(0, 10);
+        const date = toYmd(obj.published_at || obj.created_at || new Date());
 
-        items.push({
+        out.push({
           id: obj.id || crypto.randomUUID(),
           date,
           title,
@@ -93,22 +95,73 @@ async function loadNews(): Promise<NewsItem[]> {
           source: obj.source || 'robô',
         });
       } catch {
-        // ignora item ruim
+        // ignora item com erro
       }
     }
-
-    return items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    return out.filter((n) => !!n.url);
   } catch {
     return [];
   }
 }
 
+// Junta oficial + robô, dedup por URL, enriquecendo o oficial com IA
+async function loadNews(): Promise<NewsItem[]> {
+  const [official, robot] = await Promise.all([loadOfficial(), loadRobot()]);
+
+  // índice por URL para dedupe
+  const byUrl = new Map<string, NewsItem>();
+
+  // 1) insere oficial primeiro
+  for (const it of official) {
+    byUrl.set(it.url, { ...it });
+  }
+
+  // 2) mistura IA: se já existir oficial, enriquece; senão adiciona como é
+  for (const ai of robot) {
+    if (byUrl.has(ai.url)) {
+      const cur = byUrl.get(ai.url)!;
+      byUrl.set(ai.url, {
+        ...cur,
+        // mantém dados oficiais e aproveita IA onde estiver faltando
+        title_ai: cur.title_ai || ai.title_ai,
+        summary_ai: cur.summary_ai || ai.summary_ai,
+        tags: Array.isArray(cur.tags) && cur.tags.length ? cur.tags : ai.tags,
+        relevance_note: cur.relevance_note || ai.relevance_note,
+        relevance_score:
+          typeof cur.relevance_score === 'number' ? cur.relevance_score : ai.relevance_score,
+        // mantém imagem oficial se houver; senão usa a da IA
+        image: cur.image || ai.image,
+        // mantém date/title/summary originais, mas se faltarem usa os da IA
+        title: cur.title || ai.title,
+        summary: cur.summary || ai.summary,
+      });
+    } else {
+      byUrl.set(ai.url, ai);
+    }
+  }
+
+  // ordena por data desc (e id desc como desempate) e limita total
+  const merged = Array.from(byUrl.values())
+    .map((n) => ({ ...n, date: toYmd(n.date || new Date()) }))
+    .sort((a, b) => {
+      const ad = new Date(a.date).getTime();
+      const bd = new Date(b.date).getTime();
+      if (ad < bd) return 1;
+      if (ad > bd) return -1;
+      return (a.id || '').localeCompare(b.id || '') * -1;
+    })
+    .slice(0, 36);
+
+  return merged;
+}
+
+// ------- UI -------
 export default async function NewsPage() {
   const items = await loadNews();
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* HERO: metade esquerda texto, metade direita GIF (sem botão) */}
+      {/* HERO */}
       <section className="relative overflow-hidden rounded-2xl bg-[#0e1624] px-6 py-7 shadow-lg min-h-[150px] border border-white/10">
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
@@ -118,11 +171,7 @@ export default async function NewsPage() {
             </p>
           </div>
           <div className="pointer-events-none w-40 md:w-56 opacity-70">
-            <img
-              src="/media/brknews.gif"
-              alt=""
-              className="w-full h-auto object-contain select-none"
-            />
+            <img src="/media/brknews.gif" alt="" className="w-full h-auto object-contain select-none" />
           </div>
         </div>
       </section>
@@ -179,14 +228,10 @@ export default async function NewsPage() {
                   />
                 )}
 
-                {/* RESUMO COMPLETO — sem truncar */}
                 {shownSummary && (
-                  <p className="text-sm opacity-90 mt-3 whitespace-pre-wrap break-words">
-                    {shownSummary}
-                  </p>
+                  <p className="text-sm opacity-90 mt-3 whitespace-pre-wrap break-words">{shownSummary}</p>
                 )}
 
-                {/* tags AI */}
                 {Array.isArray((n as any).tags) && (n as any).tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1">
                     {(n as any).tags.map((t: string) => (
