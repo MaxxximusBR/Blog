@@ -1,0 +1,20 @@
+name: News Ingest (every 30 min)
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # a cada 30 min (UTC)
+  workflow_dispatch:         # botão "Run workflow" manual
+
+jobs:
+  ping-ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/news/ingest (prod)
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          if [ -z "$SITE_URL" ]; then
+            echo "Missing secret SITE_URL"; exit 1
+          fi
+          echo "Pinging: $SITE_URL/api/news/ingest"
+          curl -sS -f "$SITE_URL/api/news/ingest" || exit 1
