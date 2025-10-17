@@ -18,21 +18,29 @@ function normalize(s: string) {
 export default function NotamPage() {
   const [items, setItems] = useState<Notam[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [fatal, setFatal] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
   async function load() {
     try {
       setLoading(true);
-      setErr(null);
-      // você pode trocar os FIRs aqui, se quiser filtrar menos
+      setFatal(null);
+      setErrors([]);
+
       const r = await fetch('/api/awx/notam?fir=SBAZ,SBBS,SBRE,SBCW', { cache: 'no-store' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
-      const arr = Array.isArray(j?.items) ? j.items : [];
-      setItems(arr);
+
+      if (!j || j.ok === false) {
+        setFatal(j?.error || 'Falha ao consultar NOTAM.');
+        setItems([]);
+        setErrors(j?.errors || []);
+      } else {
+        setItems(Array.isArray(j.items) ? j.items : []);
+        setErrors(Array.isArray(j.errors) ? j.errors : []);
+      }
     } catch (e: any) {
-      setErr(e.message || 'Falha ao carregar');
+      setFatal(e.message || 'Falha ao carregar');
       setItems([]);
     } finally {
       setLoading(false);
@@ -52,7 +60,6 @@ export default function NotamPage() {
 
   return (
     <main className="relative">
-      {/* BG escurecido */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
         style={{ backgroundImage: `url('/media/weather.jpg')` }}
@@ -60,7 +67,6 @@ export default function NotamPage() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-black/90 backdrop-blur-[1px]" />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
-        {/* Cabeçalho com o VÍDEO à direita */}
         <header className="mb-6 md:mb-8">
           <div className="flex items-start gap-4 md:gap-6">
             <div className="flex-1 min-w-0">
@@ -86,10 +92,15 @@ export default function NotamPage() {
                 </button>
               </div>
 
-              {err && <div className="mt-3 text-sm text-red-400">Erro: {err}</div>}
+              {fatal && <div className="mt-3 text-sm text-red-400">Erro: {fatal}</div>}
+              {!!errors.length && (
+                <div className="mt-2 text-xs opacity-70">
+                  {errors.slice(0, 3).map((e, i) => <div key={i}>• {e}</div>)}
+                </div>
+              )}
             </div>
 
-            {/* VÍDEO à direita do título */}
+            {/* VÍDEO sempre visível em >= md; com poster e fallback */}
             <div className="hidden md:block shrink-0">
               <div className="w-[320px] h-[120px] rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-lg">
                 <video
@@ -99,18 +110,19 @@ export default function NotamPage() {
                   muted
                   playsInline
                   preload="metadata"
-                  aria-hidden="true"
-                  role="presentation"
+                  poster="/media/landing-poster.jpg"
                 >
-                  {/* Você disse que enviou para /public/media — use o nome do seu arquivo */}
                   <source src="/media/landing.mp4" type="video/mp4" />
                 </video>
+                {/* fallback (caso o navegador não suporte o vídeo) */}
+                <noscript>
+                  <img src="/media/landing-poster.jpg" alt="" />
+                </noscript>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Lista */}
         {loading ? (
           <div className="opacity-70">Carregando…</div>
         ) : filtered.length === 0 ? (
@@ -133,7 +145,6 @@ export default function NotamPage() {
           </div>
         )}
 
-        {/* Legenda rápida (NOTAM) */}
         <details className="mt-6">
           <summary className="cursor-pointer text-sm opacity-80">Legenda rápida (NOTAM)</summary>
           <div className="mt-2 text-sm opacity-80 space-y-1">
