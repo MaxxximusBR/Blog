@@ -21,22 +21,17 @@ type ApiResp = {
   fir?: string[];
 };
 
-// Alguns principais aeroportos (atalhos)
 const POPULARES = [
-  'SBGR', 'SBSP', 'SBRJ', 'SBGL', 'SBBR', 'SBPA', 'SBKP', 'SBCT',
-  'SBFZ', 'SBRF', 'SBSV', 'SBCF', 'SBBH', 'SBFL', 'SBMO', 'SBEG',
+  'SBGR','SBSP','SBRJ','SBGL','SBBR','SBPA','SBKP','SBCT',
+  'SBFZ','SBRF','SBSV','SBCF','SBBH','SBFL','SBMO','SBEG',
 ];
 
-// Prefixos de ICAO usados no Brasil
 const BRAZIL_ICAO_PREFIX = /^(SB|SD|SI|SJ|SN|SS|SW|SZ)[A-Z]{2}$/i;
 
-// Extrai ICAOs válidos de um texto
 function extractLocations(s: string): string[] {
   const out = new Set<string>();
   const tokens = s.toUpperCase().match(/[A-Z]{4}/g) || [];
-  for (const t of tokens) {
-    if (BRAZIL_ICAO_PREFIX.test(t)) out.add(t);
-  }
+  for (const t of tokens) if (BRAZIL_ICAO_PREFIX.test(t)) out.add(t);
   return Array.from(out);
 }
 
@@ -45,14 +40,9 @@ export default function NotamPage() {
   const [hours, setHours] = useState(24);
   const [busy, setBusy] = useState(false);
   const [resp, setResp] = useState<ApiResp | null>(null);
-
-  // Lista carregável de ICAOs (arquivo opcional /data/br-airports.json)
   const [airports, setAirports] = useState<string[]>([]);
-
-  // ICAOs digitados na barra de busca
   const locs = useMemo(() => extractLocations(query), [query]);
 
-  // Carrega lista completa (se existir)
   useEffect(() => {
     (async () => {
       try {
@@ -65,13 +55,10 @@ export default function NotamPage() {
             .sort();
           if (list.length) setAirports(list);
         }
-      } catch {
-        // OK ficar sem arquivo – seguimos só com os “populares”
-      }
+      } catch { /* ok sem arquivo */ }
     })();
   }, []);
 
-  // Fallback: populares + os do arquivo (sem duplicatas)
   const allAirports = useMemo(() => {
     const s = new Set<string>([...POPULARES, ...airports]);
     return Array.from(s).sort();
@@ -84,7 +71,6 @@ export default function NotamPage() {
       const url = hasLocs
         ? `/api/awx/notam?locations=${encodeURIComponent(locs.join(','))}&hours=${hours}`
         : `/api/awx/notam?hours=${hours}`;
-
       const r = await fetch(url, { cache: 'no-store' });
       const js = (await r.json()) as ApiResp;
       setResp(js);
@@ -95,30 +81,52 @@ export default function NotamPage() {
     }
   }
 
-  // Carrega ao abrir
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); }, []); // carrega ao abrir
 
   const items = resp?.items || [];
   const errors = resp?.errors || [];
 
-  // Inserir um código com clique
   function addIcao(code: string) {
     const set = new Set(extractLocations(query));
     set.add(code);
     setQuery(Array.from(set).join(' '));
   }
 
+  function onEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      load();
+    }
+  }
+
+  // Gera um resumo curto dos erros (sem URLs enormes):
+  const errorSummary = useMemo(() => {
+    if (!errors.length) return [];
+    return errors.map((e) => {
+      // tenta extrair algo tipo "FIR XXXX: HTTP 404" ou "LOC: HTTP 404"
+      const m = e.match(/(FIR\s+[A-Z]{4}|LOC)\s*:\s*HTTP\s*(\d+)/i);
+      return m ? `${m[1].toUpperCase()} — HTTP ${m[2]}` : e;
+    });
+  }, [errors]);
+
   return (
     <main className="relative">
-      {/* Fundo com sua imagem */}
+      {/* BG mais escuro */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
         style={{ backgroundImage: `url('/media/Sarajevo_airport_runway.jpg')` }}
       />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-black/80" />
+      {/* camada preta bem forte + um degradê para “apagar” o centro */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-black/95" />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.96) 100%)',
+        }}
+      />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
-        {/* Cabeçalho + vídeo */}
         <header className="mb-6 md:mb-8">
           <div className="flex items-start gap-6">
             <div className="flex-1 min-w-0">
@@ -127,23 +135,17 @@ export default function NotamPage() {
               </h1>
               <p className="mt-2 text-sm opacity-80">
                 Fonte:{' '}
-                <a
-                  className="underline"
-                  href="https://aviationweather.gov/data/api/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">
                   Aviation Weather Center / NOAA
-                </a>
-                . Exibindo registros vigentes (janela recente).
+                </a>. Exibindo registros vigentes (janela recente).
               </p>
 
-              {/* Barra de busca */}
               <div className="mt-4 flex flex-wrap gap-2 items-center">
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="buscar por FIR, aeródromo (SBxx), texto…  ex.: SBGR SBSP SBRJ"
+                  onKeyDown={onEnter}
+                  placeholder="buscar por FIR, aeródromo (SBxx), texto…   ex.: SBGR SBSP SBRJ"
                   className="w-full md:w-[520px] rounded-md bg-white/5 border border-white/10 px-3 py-2 outline-none"
                 />
                 <select
@@ -151,11 +153,7 @@ export default function NotamPage() {
                   value={hours}
                   onChange={(e) => setHours(Number(e.target.value))}
                 >
-                  {[6, 12, 24, 36, 48, 72].map((h) => (
-                    <option key={h} value={h}>
-                      {h}h
-                    </option>
-                  ))}
+                  {[6, 12, 24, 36, 48, 72].map(h => <option key={h} value={h}>{h}h</option>)}
                 </select>
                 <button
                   onClick={load}
@@ -166,17 +164,20 @@ export default function NotamPage() {
                 </button>
               </div>
 
-              {/* Erros (se houver) */}
-              {errors.length > 0 && (
-                <div className="mt-3 text-xs opacity-75 space-y-1">
-                  {errors.slice(0, 6).map((e, i) => (
-                    <div key={i}>• {e}</div>
-                  ))}
-                </div>
+              {/* erros: recolhíveis e resumidos */}
+              {errorSummary.length > 0 && (
+                <details className="mt-3 text-xs opacity-80">
+                  <summary className="cursor-pointer hover:opacity-100">
+                    Algumas fontes não retornaram dados (clique para detalhes)
+                  </summary>
+                  <ul className="mt-2 list-disc pl-5 space-y-1">
+                    {errorSummary.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </details>
               )}
             </div>
 
-            {/* Vídeo decorativo */}
+            {/* vídeo decorativo */}
             <div className="hidden md:block shrink-0">
               <div className="w-[340px] h-[140px] rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-lg">
                 <video
@@ -195,10 +196,10 @@ export default function NotamPage() {
           </div>
         </header>
 
-        {/* Atalhos */}
+        {/* atalhos */}
         <div className="mb-4 text-sm">
           <span className="opacity-70 mr-2">Atalhos:</span>
-          {POPULARES.map((c) => (
+          {POPULARES.map(c => (
             <button
               key={c}
               onClick={() => addIcao(c)}
@@ -210,32 +211,17 @@ export default function NotamPage() {
           ))}
         </div>
 
-        {/* Resultados */}
+        {/* resultados */}
         {items.length === 0 ? (
-          <div className="opacity-80 text-sm">Nenhum NOTAM ativo encontrado.</div>
+          <div className="opacity-85 text-sm">Nenhum NOTAM ativo encontrado.</div>
         ) : (
           <div className="space-y-3">
             {items.map((n) => (
-              <article
-                key={n.id}
-                className="rounded-xl border border-white/10 bg-black/20 p-3"
-              >
+              <article key={n.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs opacity-70 mb-1">
                   {n.icao ? <b>{n.icao}</b> : n.fir ? <b>{n.fir}</b> : null}
-                  {n.start && (
-                    <>
-                      {' '}
-                      • início:{' '}
-                      {new Date(n.start).toLocaleString('pt-BR', { hour12: false })}
-                    </>
-                  )}
-                  {n.end && (
-                    <>
-                      {' '}
-                      • fim:{' '}
-                      {new Date(n.end).toLocaleString('pt-BR', { hour12: false })}
-                    </>
-                  )}
+                  {n.start && <> • início: {new Date(n.start).toLocaleString('pt-BR', { hour12: false })}</>}
+                  {n.end && <> • fim: {new Date(n.end).toLocaleString('pt-BR', { hour12: false })}</>}
                 </div>
                 <pre className="whitespace-pre-wrap break-words text-sm">{n.text}</pre>
               </article>
@@ -243,7 +229,7 @@ export default function NotamPage() {
           </div>
         )}
 
-        {/* Lista pesquisável de ICAOs */}
+        {/* lista de códigos */}
         <details className="mt-6">
           <summary className="cursor-pointer text-sm opacity-80">
             Lista rápida de códigos (aeroportos do Brasil)
@@ -252,36 +238,19 @@ export default function NotamPage() {
         </details>
 
         <footer className="mt-8 text-xs opacity-70">
-          Dados via{' '}
-          <a
-            className="underline"
-            href="https://aviationweather.gov/data/api/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            AviationWeather.gov Data API
-          </a>
-          . Fallback para ADDS (XML) ao consultar por “locations”.
+          Dados via <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">AviationWeather.gov Data API</a>.
+          Fallback para ADDS (XML) ao consultar por “locations”.
         </footer>
       </section>
     </main>
   );
 }
 
-/* ------------------------------------------------------------ */
-/* Sub-componente: lista pesquisável                            */
-/* ------------------------------------------------------------ */
-function AirportPicker({
-  allAirports,
-  onPick,
-}: {
-  allAirports: string[];
-  onPick: (code: string) => void;
-}) {
+function AirportPicker({ allAirports, onPick }: { allAirports: string[]; onPick: (code: string) => void; }) {
   const [filter, setFilter] = useState('');
   const list = useMemo(() => {
     const f = filter.trim().toUpperCase();
-    return allAirports.filter((c) => c.includes(f)).slice(0, 400);
+    return allAirports.filter(c => c.includes(f)).slice(0, 400);
   }, [allAirports, filter]);
 
   return (
@@ -289,7 +258,7 @@ function AirportPicker({
       <div className="mb-2 flex items-center gap-2">
         <input
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={e => setFilter(e.target.value)}
           placeholder="filtrar… ex.: SB, RJ, POA"
           className="w-[260px] rounded-md bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
         />
@@ -298,7 +267,7 @@ function AirportPicker({
         </div>
       </div>
       <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        {list.map((code) => (
+        {list.map(code => (
           <button
             key={code}
             onClick={() => onPick(code)}
@@ -308,9 +277,7 @@ function AirportPicker({
             {code}
           </button>
         ))}
-        {list.length === 0 && (
-          <div className="opacity-60 text-sm">Nada encontrado…</div>
-        )}
+        {list.length === 0 && <div className="opacity-60 text-sm">Nada encontrado…</div>}
       </div>
     </div>
   );
