@@ -1,20 +1,20 @@
+// app/api/news/retrofit/route.ts
 import { NextResponse } from 'next/server';
-import { list, get, put } from '@vercel/blob';
+import { list, put } from '@vercel/blob';
 import { summarizePT } from '@/lib/cfai';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Enriquecer (retrofit) os últimos N arquivos do robô que ainda não têm IA
 const ROOT = 'news/uap/items/';
-const MAX_FILES = 60; // ajuste se quiser
+const MAX_FILES = 60; // qtde de arquivos recentes a revisar
 
 export async function GET() {
   const touched: string[] = [];
   let ia_calls = 0;
 
   try {
-    // pega os arquivos mais recentes
+    // pega os blobs (arquivos) mais recentes do robô
     const L = await list({ prefix: ROOT, limit: 500 });
     const files = [...L.blobs]
       .filter(b => b.pathname.endsWith('.json'))
@@ -24,9 +24,10 @@ export async function GET() {
     for (const f of files) {
       const res = await fetch(f.url, { cache: 'no-store' });
       if (!res.ok) continue;
+
       const item = await res.json();
 
-      // já tem IA? pula.
+      // já tem IA? pula
       if (item?.title_ai && item?.summary_ai) continue;
 
       const title   = (item?.title ?? '').toString();
@@ -36,27 +37,30 @@ export async function GET() {
       if (!base) continue;
 
       try {
-        const s = await summarizePT(base, 90); // usa Cloudflare Workers AI
+        const s = await summarizePT(base, 90);
         if (s.ok) {
           ia_calls++;
           if (!item.title_ai)   item.title_ai   = s.title   || title;
           if (!item.summary_ai) item.summary_ai = s.summary || summary;
 
-          // regrava o mesmo arquivo (sem sufixo aleatório)
           await put(f.pathname, JSON.stringify(item, null, 2), {
             access: 'public',
             contentType: 'application/json',
             addRandomSuffix: false,
           });
+
           touched.push(f.pathname);
         }
       } catch {
-        // ignora falha de IA para esse item
+        // se a IA falhar neste item, segue o fluxo
       }
     }
 
     return NextResponse.json({ ok: true, retrofitted: touched.length, ia_calls });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'fail' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: e?.message || 'fail' },
+      { status: 500 }
+    );
   }
 }
