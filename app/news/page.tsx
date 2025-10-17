@@ -26,22 +26,78 @@ type NewsItem = {
 };
 
 async function loadNews(): Promise<NewsItem[]> {
+  // 1) tenta o índice oficial (usado pelo admin/promote)
   try {
     const L = await list({ prefix: 'indexes/' });
     const it = (L.blobs as any[]).find(b => b.pathname === 'indexes/news.json');
-    if (!it?.url) return [];
-    const r = await fetch(it.url, { cache: 'no-store' });
-    if (!r.ok) return [];
-    const items = (await r.json()) as NewsItem[];
+    if (it?.url) {
+      const r = await fetch(it.url, { cache: 'no-store' });
+      if (r.ok) {
+        const arr = (await r.json()) as NewsItem[];
+        if (Array.isArray(arr) && arr.length) {
+          return arr
+            .slice()
+            .sort((a, b) => {
+              const ad = new Date(a.date).getTime();
+              const bd = new Date(b.date).getTime();
+              if (ad < bd) return 1;
+              if (ad > bd) return -1;
+              return (a.id || '').localeCompare(b.id || '') * -1;
+            });
+        }
+      }
+    }
+  } catch {
+    // cai para o fallback
+  }
 
-    // ordenar: data desc, depois id desc
-    return items.slice().sort((a, b) => {
-      const ad = new Date(a.date).getTime();
-      const bd = new Date(b.date).getTime();
-      if (ad < bd) return 1;
-      if (ad > bd) return -1;
-      return (a.id || '').localeCompare(b.id || '') * -1;
-    });
+  // 2) FALLBACK: ler o índice do robô (news/uap/index.json) e montar os cards
+  try {
+    const L2 = await list({ prefix: 'news/uap/' });
+    const idx = (L2.blobs as any[]).find(b => b.pathname === 'news/uap/index.json');
+    if (!idx?.url) return [];
+
+    const r2 = await fetch(idx.url, { cache: 'no-store' });
+    if (!r2.ok) return [];
+
+    const payload = (await r2.json()) as { items?: { url: string }[] };
+    const urls = Array.isArray(payload.items) ? payload.items.map(i => i.url) : [];
+
+    // baixa só os 18 mais recentes para não pesar o SSR
+    const limited = urls.slice(0, 18);
+    const items: NewsItem[] = [];
+    for (const url of limited) {
+      try {
+        const rr = await fetch(url, { cache: 'no-store' });
+        if (!rr.ok) continue;
+        const obj = await rr.json();
+
+        // mapeia o objeto do robô para o formato da página
+        const title = obj.title_ai || obj.title || '(sem título)';
+        const summary = obj.summary_ai || obj.summary || '';
+        const date =
+          (obj.published_at || obj.created_at || new Date().toISOString()).slice(0, 10);
+
+        items.push({
+          id: obj.id || crypto.randomUUID(),
+          date,
+          title,
+          title_ai: obj.title_ai,
+          url: obj.url || '',
+          image: obj.image_url || undefined,
+          summary,
+          summary_ai: obj.summary_ai,
+          tags: obj.topics || obj.tags || [],
+          relevance_note: obj.relevance_note,
+          relevance_score: obj.relevance_score,
+          source: obj.source || 'robô',
+        });
+      } catch {
+        // ignora item ruim
+      }
+    }
+
+    return items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   } catch {
     return [];
   }
