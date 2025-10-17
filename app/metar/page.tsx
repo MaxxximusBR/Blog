@@ -97,7 +97,7 @@ function decodeMetar(m: any) {
   const windSpd = m?.wind?.spd_kts ?? m?.wind_speed_kt ?? m?.wspd ?? m?.windspd ?? null;
   const windGst = m?.wind?.gust_kts ?? m?.wind_gust_kt ?? m?.wgst ?? m?.windgst ?? null;
 
-  // visibilidade
+  // visibilidade (1) — se vier pronta (statute miles), usa
   const visSm = m?.visibility?.sm ?? m?.visibility_statute_mi ?? m?.vis ?? null;
 
   // tempo presente
@@ -126,7 +126,29 @@ function decodeMetar(m: any) {
     ? `${windDir}° @ ${windSpd} kt${windGst ? ` (raj ${windGst})` : ''}`
     : 'calmo';
 
-  const vis = visSm != null ? `${visSm} SM (~${(Number(visSm)*1.609).toFixed(1)} km)` : '—';
+  // visibilidade (2) — se não vier pronta, decodifica do RAW
+  let vis = '—';
+  if (visSm != null && Number.isFinite(Number(visSm))) {
+    const km = Number(visSm) * 1.609344;
+    vis = `${visSm} SM (~${km.toFixed(1)} km)`;
+  } else if (typeof raw === 'string' && raw) {
+    // CAVOK: >=10 km e sem fenômenos/nuvens significativos
+    if (/(\s|^)CAVOK(\s|$)/.test(raw)) {
+      vis = 'CAVOK (≥ 10 km)';
+    } else {
+      // grupo numérico de 4 dígitos em metros (padrão internacional)
+      const mv = raw.match(/\s(\d{4})(?=\s|$)/);
+      if (mv) {
+        const mVal = parseInt(mv[1], 10);
+        if (!Number.isNaN(mVal)) {
+          if (mVal >= 9999) vis = 'mais de 10 km';
+          else if (mVal >= 1500) vis = `${(mVal / 1000).toFixed(1)} km`;
+          else vis = `${mVal} m`;
+        }
+      }
+      // alguns boletins usam 5 dígitos p/ vis variando (ex.: 0500N) – mantemos simples por ora
+    }
+  }
 
   const wxPtBr = wx
     .replaceAll('RA', 'chuva')
@@ -235,9 +257,6 @@ export default function MetarPage(){
                   role="presentation"
                 >
                   <source src="/media/metarsigmet.mp4" type="video/mp4" />
-                  {/* se quiser, adicione um .webm como fallback:
-                  <source src="/media/metarsigmet.webm" type="video/webm" />
-                  */}
                 </video>
               </div>
             </div>
@@ -374,6 +393,29 @@ export default function MetarPage(){
               })}
             </div>
           )}
+
+          {/* Legenda/Glossário SIGMET */}
+          <details className="mt-4">
+            <summary className="text-xs cursor-pointer opacity-80">Legenda de abreviações (SIGMET)</summary>
+            <div className="mt-2 grid sm:grid-cols-2 gap-2 text-xs opacity-85">
+              <div className="rounded border border-white/10 p-2">
+                <div><b>TS</b>: Trovoadas (Thunderstorm)</div>
+                <div><b>TURB</b>: Turbulência</div>
+                <div><b>ICE</b>: Gelo (icing)</div>
+                <div><b>GR/HAIL</b>: Granizo</div>
+                <div><b>VA</b>: Cinzas vulcânicas</div>
+                <div><b>DS/SS</b>: Tempestade de poeira/areia</div>
+                <div><b>EMBD</b>: Embebido (em nuvem)</div>
+              </div>
+              <div className="rounded border border-white/10 p-2">
+                <div><b>SEV / MOD</b>: Severo / Moderado</div>
+                <div><b>OBS / FCST</b>: Observado / Previsto</div>
+                <div><b>FLxxx</b>: Flight Level (ex.: FL450 = 45.000 ft)</div>
+                <div><b>Topo/Base</b>: nível superior/inferior do fenômeno</div>
+                <div><b>Movimento</b>: direção (N, NE, E, SE, S, SW, W, NW) e velocidade (kt)</div>
+              </div>
+            </div>
+          </details>
         </div>
 
         <footer className="mt-8 text-xs opacity-70">
