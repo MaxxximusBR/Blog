@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { summarizePT } from '@/lib/cfai';
 import Parser from 'rss-parser';
 import crypto from 'node:crypto';
 import { put, list } from '@vercel/blob';
@@ -135,3 +136,37 @@ export async function GET() {
 
   return NextResponse.json({ ok: true, created: created.length, ia_calls: usedIA, indexed: latest.length });
 }
+
+// -----------------------------------------------
+// ENRIQUECIMENTO COM CLOUDFLARE WORKERS AI
+// (deixa como está: se a IA faltar nas envs, o helper devolve erro e seguimos sem IA)
+try {
+  // ajuste os nomes abaixo para os que você usa no objeto final do robô
+  const robot = obj || itemOut || robotItem || item; // <- escolha o seu
+  const title   = (robot.title ?? '').toString();
+  const summary = (robot.summary ?? robot.description ?? '').toString();
+  const content = (robot.content ?? '').toString();
+
+  // texto base para a IA (limite simples por segurança)
+  const textForAI = (content || summary || title).slice(0, 8000);
+
+  // heurística: só chama IA se faltar resumo decente ou se parecer inglês
+  const looksEnglish = /[A-Za-z]{6,}/.test(summary || title) && !/[ÁÉÍÓÚÃÕÇáéíóúãõç]/.test(summary || title);
+  const needSummary  = !summary || summary.length < 60;
+
+  const shouldEnrich = textForAI && (needSummary || looksEnglish);
+
+  if (shouldEnrich) {
+    const s = await summarizePT(textForAI, 90); // ~90 palavras
+    if (s.ok) {
+      // incremente seu contador (você já retorna ia_calls no JSON)
+      ia_calls = (typeof ia_calls === 'number' ? ia_calls : 0) + 1;
+
+      // grave campos "ai" sem sobrescrever os originais
+      if (!robot.title_ai)   robot.title_ai   = s.title   || title;
+      if (!robot.summary_ai) robot.summary_ai = s.summary || summary;
+    }
+  }
+} catch {}
+// -----------------------------------------------
+
