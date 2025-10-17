@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { list, put } from '@vercel/blob';
 
+Authorization: Bearer b6c0e1fa1b7f4a0f9a3f7d51c6b9e1c9c9a2f8b2f4d3e1a0b7c6d5e4f3a2b1c
+
 const INDEX_PATH = 'indexes/news.json'; // índice oficial já usado pela sua página
 const MAX_INDEX = 500;                  // tamanho máximo do índice
 
