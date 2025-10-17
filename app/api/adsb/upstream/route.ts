@@ -18,8 +18,8 @@ export async function GET(req: Request) {
         'Accept': 'application/json,text/plain;q=0.8,*/*;q=0.5',
       },
       // Vercel às vezes precisa de keepalive para upstreams lerdos
-      // @ts-expect-error: runtime node
-      keepalive: true,
+      
+        keepalive: true,
     });
 
     if (!r.ok) {
@@ -31,12 +31,13 @@ export async function GET(req: Request) {
     }
 
     // Não alteramos o conteúdo — só repassamos
-    const json = await r.json();
-    return Response.json(json, { headers: { 'cache-control': 'no-store' } });
-  } catch (e: any) {
-    return Response.json(
-      { ok: false, error: e?.message || 'upstream_error' },
-      { status: 500 }
-    );
-  }
-}
+   const r = await fetch(u.toString(), {
+  cache: 'no-store',
+  headers: {
+    'Referer': REFERRER,
+    'Origin': REFERRER.replace(/\/+$/, ''), // sem barra ao final
+    'User-Agent': 'OVNIs-2025/1.0 (+https://blog)',
+    'Accept': 'application/json,text/plain;q=0.8,*/*;q=0.5',
+  },
+  keepalive: true,   // <- esta linha pode ficar; o TS aceita
+});
