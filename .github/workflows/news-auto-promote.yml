@@ -2,16 +2,18 @@ name: News Auto-Promote (every 60 min)
 
 on:
   schedule:
-    - cron: "*/60 * * * *"
+    - cron: "0 * * * *"  # a cada hora no minuto 0
   workflow_dispatch:
 
 jobs:
   auto-promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake promote endpoint
+      - name: Rebuild curated index
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
+          NEWS_ADMIN_TOKEN: ${{ secrets.NEWS_ADMIN_TOKEN }}
         run: |
-          echo "Waking promote endpoint..."
-          curl -fsS "${SITE_URL}/api/news/promote" || exit 1
+          echo "Rebuilding curated news index..."
+          curl -fsS -H "Authorization: Bearer ${NEWS_ADMIN_TOKEN}" \
+            "${SITE_URL}/api/news/promote" || exit 1
