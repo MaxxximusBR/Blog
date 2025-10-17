@@ -1,3 +1,4 @@
+// app/api/opensky/route.ts
 export const dynamic = 'force-dynamic';
 
 function clamp(v:number,min:number,max:number){ return Math.max(min, Math.min(max, v)); }
@@ -36,13 +37,10 @@ export async function GET(req: Request) {
         speed: s[9],
         heading: s[10],
         last: s[4],
-        /** 👇 ADICIONE ESTA LINHA */
-        squawk: String(s[14] || ''),   // <- precisamos para detectar 7700
+        squawk: String(s[14] || ''),         // <—— AQUI!
       }));
 
-    return new Response(JSON.stringify({ ok:true, items }), {
-      headers: { 'content-type':'application/json' }
-    });
+    return new Response(JSON.stringify({ ok:true, items }), { headers: { 'content-type':'application/json' }});
   } catch (e:any) {
     return new Response(JSON.stringify({ ok:false, msg: e?.message || 'Falha' }), { status: 500 });
   }
