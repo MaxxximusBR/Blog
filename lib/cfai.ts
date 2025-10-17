@@ -89,19 +89,25 @@ export const cfSummarizePtBR = summarizePT;
 
 // ---------- CLASSIFICAÇÃO (tags) ----------
 export async function cfClassifyUAP(input: string, model = DEFAULT_MODEL) {
-  // Se não quiser classificar agora, devolve vazio sem erro quando CF não estiver configurado
+  // Sem CF configurado: não falha, só devolve vazio
   if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
-    return { ok: false as const, error: 'CF env missing', tags: [] as string[] };
+    return { ok: false as const, error: 'CF env missing', tags: [] as string[], why: undefined as string|undefined, score: undefined as number|undefined };
   }
 
-  const sys = `Você classifica textos curtos sobre aviação/UAPs em etiquetas. Responda apenas JSON.`;
+  const sys = `Você classifica textos curtos sobre aviação/UAPs em etiquetas.
+Responda APENAS JSON válido, sem comentários.`;
+
   const usr = [
     `Texto:`,
     input,
     ``,
-    `Tarefa: Retorne JSON com "tags": array de palavras curtas (sem espaços).`,
-    `Sugestões quando fizer sentido: ["UAP","UFO","Drone","Balloon","Military","Airspace","Radar","ATS","ATC","FAA","FAB","Aeronáutica","Meteorology","Astronomy"].`,
-    `Formato: {"tags":["..."]}`
+    `Tarefa: Retorne JSON com os campos:`,
+    `- "tags": array de 1 a 8 palavras curtas (sem espaços, formato slug/sem acento)`,
+    `- "why": texto curtíssimo (<=140 chars) explicando a classificação`,
+    `- "score": número entre 0 e 1 representando confiança (padrão ~0.7 se incerto)`,
+    ``,
+    `Sugestões quando fizer sentido: ["UAP","UFO","Drone","Balloon","Military","Airspace","Radar","ATS","ATC","FAA","FAB","Aeronautica","Meteorology","Astronomy"].`,
+    `Formato (exato): {"tags":["UAP","Radar"],"why":"...","score":0.82}`
   ].join('\n');
 
   const res = await cfChat(
@@ -111,13 +117,26 @@ export async function cfClassifyUAP(input: string, model = DEFAULT_MODEL) {
     ],
     model
   );
-  if (!res.ok) return { ok: false as const, error: res.error, tags: [] as string[] };
+  if (!res.ok) {
+    return {
+      ok: false as const,
+      error: res.error,
+      tags: [],
+      why: undefined,
+      score: undefined,
+    };
+  }
 
   try {
     const o = JSON.parse(res.text);
-    const tags: string[] = Array.isArray(o?.tags) ? o.tags.map((t:any)=>String(t)).slice(0, 8) : [];
-    return { ok: true as const, tags };
+    const tags: string[] = Array.isArray(o?.tags)
+      ? o.tags.map((t: any) => String(t).trim()).filter(Boolean).slice(0, 8)
+      : [];
+    const why  = o?.why  ? String(o.why).trim()   : undefined;
+    const score= typeof o?.score === 'number' ? o.score : undefined;
+
+    return { ok: true as const, tags, why, score };
   } catch {
-    return { ok: true as const, tags: [] as string[] };
+    return { ok: true as const, tags: [], why: undefined, score: undefined };
   }
 }
