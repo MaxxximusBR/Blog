@@ -1,3 +1,4 @@
+// app/layout.tsx
 import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import Link from 'next/link';
@@ -19,12 +20,15 @@ export default function RootLayout({ children }:{ children:React.ReactNode }){
             <Link href="/" className="font-semibold tracking-wide">
               Anuário OVNIs 2025 / Luzes POA 2022
             </Link>
+
             <nav className="flex gap-4 text-sm">
               <Link href="/reports" className="hover:underline">Relatórios</Link>
               <Link href="/dashboard" className="hover:underline">Consolidação</Link>
               <Link href="/news" className="hover:underline">Notícias</Link>
               <Link href="/atc-frequencias" className="hover:underline">Frequências ATC</Link>
               <Link href="/metar" className="hover:underline">METAR</Link>
+              {/* novo item do menu */}
+              <Link href="/notam" className="hover:underline">NOTAM</Link>
               <a
                 href="https://www.youtube.com/@LuzesAbismo"
                 target="_blank"
