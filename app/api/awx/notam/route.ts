@@ -3,18 +3,18 @@ import { NextResponse } from 'next/server';
 
 const AWC_BASE = (process.env.AWC_BASE || 'https://aviationweather.gov').replace(/\/+$/, '');
 
-// Fallback de principais aeroportos BR (pode ajustar à vontade)
+// Aeroportos BR de fallback (pode ajustar)
 const BR_AIRPORTS_FALLBACK = [
-  'SBGR','SBSP','SBKP',        // São Paulo
-  'SBRJ','SBGL',               // Rio
-  'SBCT','SBPA','SBFL',        // Sul
-  'SBBR','SBCF','SBBH',        // Centro/Sudeste
-  'SBEG','SBRF','SBSV','SBMO', // Norte/Nordeste
-  'SBBE','SBSL','SBFZ','SBNT', // +Nordeste/Norte
+  'SBGR','SBSP','SBKP',
+  'SBRJ','SBGL',
+  'SBCT','SBPA','SBFL',
+  'SBBR','SBCF','SBBH',
+  'SBEG','SBRF','SBSV','SBMO',
+  'SBBE','SBSL','SBFZ','SBNT',
 ];
 
-// FIRs brasileiras (deixamos como “best effort”)
-const FIR_BR = ['SBAZ', 'SBBS', 'SBRE', 'SBCW'];
+// FIRs BR (best-effort)
+const FIR_BR = ['SBAZ','SBBS','SBRE','SBCW'];
 
 type NotamLike = {
   id?: string;
@@ -73,107 +73,125 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-async function tryFetch(url: string, headers: Record<string,string>) {
-  const r = await fetch(url, { cache: 'no-store', headers });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return normalizeList(await r.json());
+async function fetchVariant(url: string, headers: Record<string,string>) {
+  const res = await fetch(url, { cache: 'no-store', headers });
+  const ok = res.ok;
+  let data: any = null;
+  try { data = await res.json(); } catch { /* ignore */ }
+  return { ok, status: res.status, data };
 }
 
-async function fetchByLocations(locations: string[], headers: Record<string,string>) {
-  // Tenta as duas árvores
+async function tryMany(
+  buildUrls: () => string[],
+  headers: Record<string,string>,
+  debugTrials?: any[],
+) {
+  for (const u of buildUrls()) {
+    const r = await fetchVariant(u, headers);
+    debugTrials?.push({ url: u, status: r.status });
+    if (r.ok) {
+      const list = normalizeList(r.data);
+      if (Array.isArray(list)) return list;
+    }
+  }
+  return [];
+}
+
+async function fetchByLocations(locations: string[], headers: Record<string,string>, debugTrials?: any[]) {
+  // Dois caminhos base
   const bases = [`${AWC_BASE}/data/api/notam`, `${AWC_BASE}/api/data/notam`];
-  const errors: string[] = [];
+
+  // Variações com “mais chance”:
+  // - format=geojson e json
+  // - notamType=icao
+  // - hours=120 (janela maior ajuda muito a evitar 404)
+  const buildForGroup = (base: string, group: string[]) => {
+    const joined = encodeURIComponent(group.join(','));
+    return [
+      `${base}?format=geojson&notamType=icao&locations=${joined}&hours=120`,
+      `${base}?format=json&notamType=icao&locations=${joined}&hours=120`,
+      `${base}?format=geojson&locations=${joined}&hours=120`,
+      `${base}?format=json&locations=${joined}&hours=120`,
+    ];
+  };
+
   let items: NotamLike[] = [];
 
-  // AWC costuma aceitar ~100–150 ICAOs por chamada. Vamos ser conservadores.
   for (const base of bases) {
-    for (const group of chunk(locations, 80)) {
-      const endpoint = `${base}?format=json&locations=${encodeURIComponent(group.join(','))}`;
-      try {
-        const list = await tryFetch(endpoint, headers);
-        items = items.concat(list);
-      } catch (e: any) {
-        errors.push(`LOC ${group[0]}…: ${e?.message || e}`);
-      }
+    for (const group of chunk(locations, 60)) {
+      const list = await tryMany(() => buildForGroup(base, group), headers, debugTrials);
+      items = items.concat(list);
     }
-    if (items.length) break; // conseguiu por esta base
+    if (items.length) break; // já deu certo por este base
   }
 
-  return { items, errors };
+  return items;
 }
 
-async function fetchByFIRs(firs: string[], headers: Record<string,string>) {
+async function fetchByFIRs(firs: string[], headers: Record<string,string>, debugTrials?: any[]) {
   const bases = [`${AWC_BASE}/data/api/notam`, `${AWC_BASE}/api/data/notam`];
-  const params = [
-    (b: string, fir: string) => `${b}?format=json&fir=${encodeURIComponent(fir)}`,
-    (b: string, fir: string) => `${b}?format=json&firName=${encodeURIComponent(fir)}`,
-    (b: string, fir: string) => `${b}?format=json&locations=${encodeURIComponent(fir)}`,
-  ];
 
-  const errors: string[] = [];
+  const buildForFIR = (base: string, fir: string) => {
+    const f = encodeURIComponent(fir);
+    return [
+      `${base}?format=geojson&fir=${f}&hours=120`,
+      `${base}?format=json&fir=${f}&hours=120`,
+      `${base}?format=geojson&firName=${f}&hours=120`,
+      `${base}?format=json&firName=${f}&hours=120`,
+      `${base}?format=geojson&locations=${f}&hours=120`, // alguns servidores aceitam FIR como "location"
+      `${base}?format=json&locations=${f}&hours=120`,
+    ];
+  };
+
   let items: NotamLike[] = [];
-
-  for (const fir of firs) {
-    let okForThis = false;
-    for (const b of bases) {
-      for (const build of params) {
-        const url = build(b, fir);
-        try {
-          const list = await tryFetch(url, headers);
-          items = items.concat(list.map(x => ({ ...x, fir })));
-          okForThis = true;
-          break;
-        } catch (e: any) {
-          // tenta próxima variação
-        }
-      }
-      if (okForThis) break;
+  for (const base of bases) {
+    for (const fir of firs) {
+      const list = await tryMany(() => buildForFIR(base, fir), headers, debugTrials);
+      if (list.length) items = items.concat(list.map(x => ({ ...x, fir })));
     }
-    if (!okForThis) errors.push(`FIR ${fir}: HTTP 404`);
   }
-
-  return { items, errors };
+  return items;
 }
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(req: Request) {
-  const errors: string[] = [];
+  const url = new URL(req.url);
+  const debug = url.searchParams.get('debug') === '1';
+
+  // ?locations=SBGR,SBSP ou usa fallback
+  const locParam = (url.searchParams.get('locations') || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
+
+  // ?fir=SBAZ,SBBS ou usa FIR_BR
+  const firParam = (url.searchParams.get('fir') || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
+
+  const locations = locParam.length ? locParam : BR_AIRPORTS_FALLBACK;
+  const firs = firParam.length ? firParam : FIR_BR;
+
+  const headers = {
+    'User-Agent': 'OVNIs2025/1.0 (+https://github.com/)',
+    'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': 'https://aviationweather.gov/',
+  };
+
+  const trials: Array<{url:string; status:number}> = [];
+
   try {
-    const url = new URL(req.url);
+    // 1) locations primeiro (mais estável)
+    const byLoc = await fetchByLocations(locations, headers, trials);
 
-    // Você pode passar ?locations=SBGR,SBSP,SBRJ ou ?fir=SBAZ,SBBS…
-    const locParam = (url.searchParams.get('locations') || '')
-      .split(',')
-      .map(s => s.trim().toUpperCase())
-      .filter(Boolean);
+    // 2) FIRs como complemento
+    const byFir = await fetchByFIRs(firs, headers, trials);
 
-    const firParam = (url.searchParams.get('fir') || '')
-      .split(',')
-      .map(s => s.trim().toUpperCase())
-      .filter(Boolean);
-
-    // Se não passar nada, usamos lista de aeroportos (mais estável que FIR)
-    const locations = locParam.length ? locParam : BR_AIRPORTS_FALLBACK;
-    const firs = firParam.length ? firParam : FIR_BR;
-
-    const headers = {
-      'User-Agent': 'OVNIs2025/1.0 (+https://github.com/)',
-      'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Referer': 'https://aviationweather.gov/',
-    };
-
-    // 1) Tenta por LOCATIONS (principal)
-    const byLoc = await fetchByLocations(locations, headers);
-    errors.push(...byLoc.errors);
-
-    // 2) Em paralelo, tenta FIR (best-effort)
-    const byFir = await fetchByFIRs(firs, headers);
-    errors.push(...byFir.errors);
-
-    const raw = [...byLoc.items, ...byFir.items];
+    const raw = [...byLoc, ...byFir];
 
     const items = uniq(
       raw.map((n: NotamLike) => {
@@ -199,20 +217,30 @@ export async function GET(req: Request) {
       x => x.id,
     );
 
-    return NextResponse.json({
+    // Erros ficam inferidos pelos trials (mostrar no front se quiser)
+    const errors: string[] = [];
+    for (const t of trials) {
+      if (t.status >= 400) errors.push(`${t.url.includes('locations=') ? 'LOC' : t.url.includes('fir') ? 'FIR' : 'REQ'}: HTTP ${t.status}`);
+    }
+
+    const payload: any = {
       ok: true,
       count: items.length,
       firs,
       locations,
       errors,
       items,
-    });
+    };
+
+    if (debug) payload.trials = trials;
+
+    return NextResponse.json(payload);
   } catch (e: any) {
     return NextResponse.json({
       ok: false,
       error: e?.message || 'internal',
-      errors: [String(e)],
       items: [],
+      trials,
     });
   }
 }
