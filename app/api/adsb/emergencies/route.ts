@@ -1,78 +1,89 @@
-import { NextResponse } from 'next/server';
-
+// app/api/adsb/emergencies/route.ts
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+
+type Flight = { hex: string; flight?: string };
+
+function ok(res: any) {
+  return new Response(JSON.stringify(res), { headers: { 'content-type': 'application/json' } });
+}
+function fail(status: number, error: string) {
+  return new Response(JSON.stringify({ ok: false, error }), { status, headers: { 'content-type': 'application/json' } });
+}
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
+  const u = new URL(req.url);
 
-  // 1) fonte "primária" (tar1090/json) definida por env ou padrão /api/adsb/upstream
-  const envJson = process.env.ADSB_JSON || '/api/adsb/upstream';
-  const primary = envJson.startsWith('http') ? envJson : new URL(envJson, url.origin).href;
-
-  // 2) fallback: seu route de OpenSky (Brasil central como exemplo)
-  //    ajuste os valores se quiser outro centro/raio.
-  const openskyLocal = new URL('/api/opensky', url.origin); // <- use o caminho real onde seu route está
-  openskyLocal.searchParams.set('lat', '-14.2'); // centro aproximado BR
-  openskyLocal.searchParams.set('lon', '-51.9');
-  openskyLocal.searchParams.set('r', '20');      // raio "grande" (~20º) para cobrir o país
-  const fallback = openskyLocal.href;
-
-  // Função utilitária de fetch+normalize
-  async function getFromTar1090Like(src: string) {
-    const r = await fetch(src, { cache: 'no-store' });
-    if (!r.ok) return { ok: false, status: r.status };
-    const j = await r.json();
-    // esperamos { aircraft:[{hex,flight,squawk}...] }
-    const arr = Array.isArray(j?.aircraft) ? j.aircraft : [];
-    return {
+  // DEMO curto e grosso (sempre funciona)
+  if (u.searchParams.get('demo') === '1') {
+    return ok({
       ok: true,
-      aircraft: arr.map((a:any) => ({
-        hex: (a?.hex || a?.icao || '').toString(),
-        flight: (a?.flight || a?.callsign || '').toString().trim(),
-        squawk: (a?.squawk || '').toString(),
-      })),
-      source: j?.source || 'tar1090',
-    };
+      count: 1,
+      flights: [{ hex: 'abc123', flight: 'TEST7700' }],
+      source: 'demo',
+      ts: Date.now(),
+    });
   }
 
-  async function getFromYourOpenSky(src: string) {
-    const r = await fetch(src, { cache: 'no-store' });
-    if (!r.ok) return { ok: false, status: r.status };
-    const j = await r.json();
-    // seu route retorna { ok:true, items:[{hex, callsign, squawk, ...}] }
-    const items = Array.isArray(j?.items) ? j.items : [];
-    return {
-      ok: true,
-      aircraft: items.map((it:any) => ({
-        hex: (it?.hex || '').toString(),
-        flight: (it?.callsign || '').toString().trim(),
-        squawk: (it?.squawk || '').toString(),
-      })),
-      source: 'opensky-local',
-    };
+  // 1) Tenta ADSB JSON (proxy interno) — por padrão /api/adsb/upstream
+  const ADSB_JSON = process.env.ADSB_JSON || '/api/adsb/upstream';
+  const adsbUrl = ADSB_JSON.startsWith('http') ? ADSB_JSON : `${u.origin}${ADSB_JSON}`;
+
+  try {
+    const r = await fetch(adsbUrl, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json().catch(() => ({}));
+      const ac = Array.isArray(j?.aircraft) ? j.aircraft : [];
+      const emerg = ac.filter(
+        (a: any) =>
+          a?.squawk === '7700' ||
+          a?.squawk === 7700 ||
+          (typeof a?.emergency === 'string' && /7700|emergency/i.test(a.emergency))
+      );
+
+      if (emerg.length > 0) {
+        const flights: Flight[] = emerg.map((a: any) => ({
+          hex: String(a.hex || a.icao || a.icao24 || '').trim(),
+          flight: String(a.flight || a.callsign || '').trim(),
+        }));
+        return ok({ ok: true, count: flights.length, flights, source: 'adsb-json', ts: Date.now() });
+      }
+      // Se não achou 7700 no ADSB, continua no fallback…
+    } else {
+      // 403 etc: ignora e cai para fallback
+    }
+  } catch {
+    // erro no ADSB; cai para fallback
   }
 
-  // Tenta primary → fallback
-  let data = await getFromTar1090Like(primary);
-  if (!data.ok) data = await getFromYourOpenSky(fallback);
+  // 2) Fallback: rota do OpenSky interna (usa squawk do passo 1)
+  try {
+    // opcional: aceitar lat/lon/r na query pra customizar área
+    const lat = Number(u.searchParams.get('lat') ?? -30.03);
+    const lon = Number(u.searchParams.get('lon') ?? -51.22);
+    const r = Number(u.searchParams.get('r') ?? 5);
 
-  if (!data.ok) {
-    return NextResponse.json(
-      { ok: false, error: `All sources failed (${data.status || 'unknown'})` },
-      { status: 502 }
-    );
+    const osUrl = `${u.origin}/api/opensky?lat=${lat}&lon=${lon}&r=${r}`;
+    const r2 = await fetch(osUrl, { cache: 'no-store' });
+    if (r2.ok) {
+      const j2 = await r2.json().catch(() => ({}));
+      const items = Array.isArray(j2?.items) ? j2.items : [];
+      const emerg2 = items.filter((a: any) => String(a?.squawk || '').trim() === '7700');
+
+      if (emerg2.length > 0) {
+        const flights: Flight[] = emerg2.map((a: any) => ({
+          hex: String(a.hex || '').trim(),
+          flight: String(a.callsign || '').trim(),
+        }));
+        return ok({ ok: true, count: flights.length, flights, source: 'opensky', ts: Date.now() });
+      }
+
+      // nenhum 7700 na área consultada
+      return ok({ ok: true, count: 0, flights: [], source: 'opensky', ts: Date.now() });
+    }
+  } catch {
+    // ignore
   }
 
-  // Filtra SQUAWK 7700
-  const emerg = (data.aircraft || []).filter((a:any) => (a?.squawk || '') === '7700');
-  const flights = emerg.map((a:any) => ({ hex: a.hex, flight: a.flight }));
-
-  return NextResponse.json({
-    ok: true,
-    count: flights.length,
-    flights,
-    source: data.source,
-    ts: Date.now(),
-  });
+  // Se chegou aqui, nada deu certo
+  return fail(200, 'No data (all sources unavailable)');
 }
