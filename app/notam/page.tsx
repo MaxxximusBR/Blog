@@ -111,20 +111,21 @@ export default function NotamPage() {
 
   return (
     <main className="relative">
-      {/* BG mais escuro */}
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
-        style={{ backgroundImage: `url('/media/Sarajevo_airport_runway.jpg')` }}
-      />
-      {/* camada preta bem forte + um degradê para “apagar” o centro */}
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-black/95" />
-      <div
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            'radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.96) 100%)',
-        }}
-      />
+      {/* BG mais claro (mantém leitura, mas deixa a foto aparecer) */}
+<div
+  className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
+  style={{ backgroundImage: `url('/media/Sarajevo_airport_runway.jpg')` }}
+/>
+{/* reduz de 95% para 80% */}
+<div className="pointer-events-none absolute inset-0 -z-10 bg-black/80" />
+{/* gradiente mais suave (clareia centro e bordas) */}
+<div
+  className="pointer-events-none absolute inset-0 -z-10"
+  style={{
+    background:
+      'radial-gradient(ellipse at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.75) 100%)',
+  }}
+/>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
         <header className="mb-6 md:mb-8">
