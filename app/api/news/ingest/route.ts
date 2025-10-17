@@ -1,5 +1,5 @@
+// app/api/news/ingest/route.ts
 import { NextResponse } from 'next/server';
-import { summarizePT } from '@/lib/cfai';
 import Parser from 'rss-parser';
 import crypto from 'node:crypto';
 import { put, list } from '@vercel/blob';
@@ -7,8 +7,14 @@ import { cfClassifyUAP, cfSummarizePtBR } from '@/lib/cfai';
 
 // ===== CONFIG =====
 const SOURCES = [
-  { name: 'GoogleNews-PT', url: 'https://news.google.com/rss/search?q=OVNI+OR+OVNIS+OR+UAP+OR+%22objeto+n%C3%A3o+identificado%22+OR+%22luz+no+ceu%22+OR+%22drone+n%C3%A3o+identificado%22&hl=pt-BR&gl=BR&ceid=BR:pt-419' },
-  { name: 'GoogleNews-EN', url: 'https://news.google.com/rss/search?q=UFO+OR+UAP+OR+%22unidentified+drone%22+OR+%22unidentified+object%22+OR+%22mystery+lights%22&hl=en-US&gl=US&ceid=US:en' },
+  {
+    name: 'GoogleNews-PT',
+    url: 'https://news.google.com/rss/search?q=OVNI+OR+OVNIS+OR+UAP+OR+%22objeto+n%C3%A3o+identificado%22+OR+%22luz+no+ceu%22+OR+%22drone+n%C3%A3o+identificado%22&hl=pt-BR&gl=BR&ceid=BR:pt-419'
+  },
+  {
+    name: 'GoogleNews-EN',
+    url: 'https://news.google.com/rss/search?q=UFO+OR+UAP+OR+%22unidentified+drone%22+OR+%22unidentified+object%22+OR+%22mystery+lights%22&hl=en-US&gl=US&ceid=US:en'
+  },
 ];
 
 const KEYWORDS = [
@@ -36,12 +42,12 @@ function looksUAP(title: string, snippet: string) {
 }
 
 function idFromUrl(url: string) {
-  return crypto.createHash('sha1').update(url).digest('hex').slice(0,24);
+  return crypto.createHash('sha1').update(url).digest('hex').slice(0, 24);
 }
 
 function daySlug(d: Date | string) {
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toISOString().slice(0,10); // YYYY-MM-DD
+  return dt.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 const parser = new Parser({ timeout: 10000 });
@@ -56,14 +62,17 @@ export async function GET() {
   for (const src of SOURCES) {
     try {
       const feed = await parser.parseURL(src.url);
+
       for (const item of (feed.items ?? [])) {
         const url = item.link || item.id;
         if (!url) continue;
 
         const title = (item.title || '').trim();
-        const snippet = (item.contentSnippet || item.content || item.summary || '').replace(/\s+/g,' ').trim();
+        const snippet = (item.contentSnippet || item.content || item.summary || '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
-        // filtro rápido (gratuito)
+        // 1) Filtro rápido (gratuito)
         if (!looksUAP(title, snippet)) continue;
 
         const id = idFromUrl(url);
@@ -71,40 +80,51 @@ export async function GET() {
         const day = daySlug(pub);
         const path = `${ROOT}/items/${day}/${id}.json`;
 
-        // IA: classificar
-        let ok = true, why = 'rule-only', score = 1;
+        // 2) Classificação IA (tags/why/score) — robusto a ausência de CF env
+        let ok = true;
+        let why = 'rule-only';
+        let score = 1;
+        let tags_ai: string[] | undefined = undefined;
         try {
-          const cls = await cfClassifyUAP(title, snippet);
-          ok = !!cls.ok; why = cls.why || why; score = typeof cls.score === 'number' ? cls.score : 0.7;
+          const cls = await cfClassifyUAP(`${title}\n\n${snippet}`);
+          ok = !!cls.ok;
+          if (cls.why)   why   = cls.why;
+          if (typeof cls.score === 'number') score = cls.score;
+          if (cls.tags?.length) tags_ai = cls.tags;
           usedIA++;
         } catch {
-          // se falhar IA, mantém ok=true (passa no filtro 1)
+          // se IA falhar, mantemos ok=true para passar pelo filtro de palavras
         }
         if (!ok) continue;
 
-        // IA: resumir PT-BR
-        let title_ai = title, summary_ai = snippet; let topics = ['ufo'];
+        // 3) Resumo PT-BR IA (título/summary) — robusto a ausência de CF env
+        let title_ai = title;
+        let summary_ai = snippet;
         try {
-          const sum = await cfSummarizePtBR(title, snippet);
-          title_ai = sum.titulo || title_ai;
-          summary_ai = sum.resumo || summary_ai;
-          topics = Array.isArray(sum.topicos) && sum.topicos.length ? sum.topicos : topics;
-          usedIA++;
+          const sum = await cfSummarizePtBR(`${title}\n\n${snippet}`, 90);
+          if (sum.ok) {
+            if (sum.title)   title_ai   = sum.title;
+            if (sum.summary) summary_ai = sum.summary;
+            usedIA++;
+          }
         } catch {
           // fallback: mantém snippet
         }
 
+        // 4) Monta payload do “robô” e grava no Blob
         const payload = {
           id, url,
           source: src.name,
           published_at: pub,
-          title, summary: snippet,
-          title_ai, summary_ai,
-          topics,
+          title,
+          summary: snippet,
+          title_ai,
+          summary_ai,
+          topics: tags_ai ?? ['ufo'],
           relevance_note: why,
           relevance_score: score,
-          image_url: item.enclosure?.url || item.itunes?.image || null,
-          author: item.creator || item.author || null,
+          image_url: (item.enclosure as any)?.url || (item as any)?.itunes?.image || null,
+          author: (item as any)?.creator || (item as any)?.author || null,
           approved: true,
           created_at: new Date().toISOString()
         };
@@ -114,6 +134,7 @@ export async function GET() {
           contentType: 'application/json',
           addRandomSuffix: false,
         });
+
         created.push(path);
       }
     } catch (e) {
@@ -121,10 +142,10 @@ export async function GET() {
     }
   }
 
-  // atualiza índice
+  // 5) Atualiza o índice público do robô
   const all = await list({ prefix: `${ROOT}/items/`, limit: 300 });
   const latest = [...all.blobs]
-    .sort((a,b) => +new Date(b.uploadedAt) - +new Date(a.uploadedAt))
+    .sort((a, b) => +new Date(b.uploadedAt) - +new Date(a.uploadedAt))
     .slice(0, 80)
     .map(b => ({ url: b.url }));
 
@@ -134,39 +155,10 @@ export async function GET() {
     addRandomSuffix: false,
   });
 
-  return NextResponse.json({ ok: true, created: created.length, ia_calls: usedIA, indexed: latest.length });
+  return NextResponse.json({
+    ok: true,
+    created: created.length,
+    ia_calls: usedIA,
+    indexed: latest.length
+  });
 }
-
-// -----------------------------------------------
-// ENRIQUECIMENTO COM CLOUDFLARE WORKERS AI
-// (deixa como está: se a IA faltar nas envs, o helper devolve erro e seguimos sem IA)
-try {
-  // ajuste os nomes abaixo para os que você usa no objeto final do robô
-  const robot = obj || itemOut || robotItem || item; // <- escolha o seu
-  const title   = (robot.title ?? '').toString();
-  const summary = (robot.summary ?? robot.description ?? '').toString();
-  const content = (robot.content ?? '').toString();
-
-  // texto base para a IA (limite simples por segurança)
-  const textForAI = (content || summary || title).slice(0, 8000);
-
-  // heurística: só chama IA se faltar resumo decente ou se parecer inglês
-  const looksEnglish = /[A-Za-z]{6,}/.test(summary || title) && !/[ÁÉÍÓÚÃÕÇáéíóúãõç]/.test(summary || title);
-  const needSummary  = !summary || summary.length < 60;
-
-  const shouldEnrich = textForAI && (needSummary || looksEnglish);
-
-  if (shouldEnrich) {
-    const s = await summarizePT(textForAI, 90); // ~90 palavras
-    if (s.ok) {
-      // incremente seu contador (você já retorna ia_calls no JSON)
-      ia_calls = (typeof ia_calls === 'number' ? ia_calls : 0) + 1;
-
-      // grave campos "ai" sem sobrescrever os originais
-      if (!robot.title_ai)   robot.title_ai   = s.title   || title;
-      if (!robot.summary_ai) robot.summary_ai = s.summary || summary;
-    }
-  }
-} catch {}
-// -----------------------------------------------
-
