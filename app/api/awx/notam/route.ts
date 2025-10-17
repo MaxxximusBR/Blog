@@ -12,8 +12,6 @@ type NotamLike = {
   text?: string;
   icao?: string;
   fir?: string;
-
-  // tempos — variam conforme o backend
   start?: string | number;
   end?: string | number;
   effective?: string | number;
@@ -23,11 +21,8 @@ type NotamLike = {
   valid_to?: string | number;
   time_start?: string | number;
   time_end?: string | number;
-
-  // localização
   location?: string;
   airport?: string;
-
   [k: string]: any;
 };
 
@@ -65,28 +60,36 @@ async function fetchNotamForFir(
   fir: string,
   headers: Record<string, string>,
 ) {
-  // Ordem de maior chance de sucesso nos espelhos do AWC
-  const candidates = [
-    `${AWC_BASE}/data/api/notam?format=json&fir=${encodeURIComponent(fir)}`,
-    `${AWC_BASE}/data/api/notam?format=json&firName=${encodeURIComponent(fir)}`,
-    `${AWC_BASE}/data/api/notam?format=json&locations=${encodeURIComponent(fir)}`,
+  // Tentar as duas árvores conhecidas: /data/api e /api/data
+  const pathVariants = ['/data/api/notam', '/api/data/notam'];
+
+  // Tentar os três jeitos que o AWC aceita a FIR/Local
+  const queryVariants = [
+    (base: string) => `${base}?format=json&fir=${encodeURIComponent(fir)}`,
+    (base: string) => `${base}?format=json&firName=${encodeURIComponent(fir)}`,
+    (base: string) => `${base}?format=json&locations=${encodeURIComponent(fir)}`,
   ];
 
   let lastErr: string | null = null;
 
-  for (const url of candidates) {
-    try {
-      const r = await fetch(url, { cache: 'no-store', headers });
-      if (!r.ok) {
-        lastErr = `HTTP ${r.status}`;
-        continue; // tenta o próximo candidato
+  for (const path of pathVariants) {
+    for (const build of queryVariants) {
+      const url = `${AWC_BASE}${path}${path.endsWith('?') ? '' : ''}`;
+      const endpoint = build(`${AWC_BASE}${path}`);
+
+      try {
+        const r = await fetch(endpoint, { cache: 'no-store', headers });
+        if (!r.ok) {
+          lastErr = `HTTP ${r.status}`;
+          continue;
+        }
+        const j = await r.json();
+        const list = normalizeList(j);
+        return { ok: true as const, list };
+      } catch (e: any) {
+        lastErr = e?.message || String(e);
+        continue;
       }
-      const j = await r.json();
-      const list = normalizeList(j);
-      return { ok: true as const, list };
-    } catch (e: any) {
-      lastErr = e?.message || String(e);
-      continue;
     }
   }
 
@@ -110,7 +113,9 @@ export async function GET(req: Request) {
 
     const headers = {
       'User-Agent': 'OVNIs2025/1.0 (+https://github.com/)',
-      Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8',
+      'Accept': 'application/json,text/plain;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': 'https://aviationweather.gov/', // ajuda a evitar bloqueio bobo
     };
 
     const results = await Promise.all(
@@ -157,7 +162,6 @@ export async function GET(req: Request) {
 
     const merged = uniq(results.flat(), (x) => x.id);
 
-    // Sempre 200 — com ou sem erros parciais
     return NextResponse.json({
       ok: true,
       count: merged.length,
@@ -166,7 +170,6 @@ export async function GET(req: Request) {
       items: merged,
     });
   } catch (e: any) {
-    // Última linha de defesa: ainda retornamos 200 com erro descritivo
     return NextResponse.json({
       ok: false,
       error: e?.message || 'internal',
