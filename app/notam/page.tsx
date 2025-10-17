@@ -21,16 +21,16 @@ type ApiResp = {
   fir?: string[];
 };
 
-// alguns principais aeroportos (para adicionar com 1 clique)
-// você pode editar esta lista à vontade:
+// Alguns principais aeroportos (atalhos)
 const POPULARES = [
   'SBGR', 'SBSP', 'SBRJ', 'SBGL', 'SBBR', 'SBPA', 'SBKP', 'SBCT',
   'SBFZ', 'SBRF', 'SBSV', 'SBCF', 'SBBH', 'SBFL', 'SBMO', 'SBEG',
 ];
 
+// Prefixos de ICAO usados no Brasil
 const BRAZIL_ICAO_PREFIX = /^(SB|SD|SI|SJ|SN|SS|SW|SZ)[A-Z]{2}$/i;
 
-// extrai ICAOs válidos do texto
+// Extrai ICAOs válidos de um texto
 function extractLocations(s: string): string[] {
   const out = new Set<string>();
   const tokens = s.toUpperCase().match(/[A-Z]{4}/g) || [];
@@ -45,10 +45,14 @@ export default function NotamPage() {
   const [hours, setHours] = useState(24);
   const [busy, setBusy] = useState(false);
   const [resp, setResp] = useState<ApiResp | null>(null);
-  const [airports, setAirports] = useState<string[]>([]); // lista pesquisável
+
+  // Lista carregável de ICAOs (arquivo opcional /data/br-airports.json)
+  const [airports, setAirports] = useState<string[]>([]);
+
+  // ICAOs digitados na barra de busca
   const locs = useMemo(() => extractLocations(query), [query]);
 
-  // carrega lista completa (opcional) de /data/br-airports.json (se existir)
+  // Carrega lista completa (se existir)
   useEffect(() => {
     (async () => {
       try {
@@ -61,11 +65,13 @@ export default function NotamPage() {
             .sort();
           if (list.length) setAirports(list);
         }
-      } catch { /* ok sem arquivo */ }
+      } catch {
+        // OK ficar sem arquivo – seguimos só com os “populares”
+      }
     })();
   }, []);
 
-  // fallback: se não tiver JSON, ao menos mostramos populares + dedup
+  // Fallback: populares + os do arquivo (sem duplicatas)
   const allAirports = useMemo(() => {
     const s = new Set<string>([...POPULARES, ...airports]);
     return Array.from(s).sort();
@@ -89,12 +95,13 @@ export default function NotamPage() {
     }
   }
 
-  useEffect(() => { load(); /* carrega ao abrir */ }, []); // eslint-disable-line
+  // Carrega ao abrir
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
   const items = resp?.items || [];
   const errors = resp?.errors || [];
 
-  // UI auxiliar: inserir um código com clique
+  // Inserir um código com clique
   function addIcao(code: string) {
     const set = new Set(extractLocations(query));
     set.add(code);
@@ -103,15 +110,15 @@ export default function NotamPage() {
 
   return (
     <main className="relative">
-      {/* BG decorativo */}
+      {/* Fundo com sua imagem */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
-        style={{ backgroundImage: `url('/media/weather.jpg')` }}
+        style={{ backgroundImage: `url('/media/Sarajevo_airport_runway.jpg')` }}
       />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-black/90 backdrop-blur-[1px]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-black/80" />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 md:py-10">
-        {/* Cabeçalho + vídeo à direita */}
+        {/* Cabeçalho + vídeo */}
         <header className="mb-6 md:mb-8">
           <div className="flex items-start gap-6">
             <div className="flex-1 min-w-0">
@@ -119,10 +126,19 @@ export default function NotamPage() {
                 NOTAM — Brasil (ativos)
               </h1>
               <p className="mt-2 text-sm opacity-80">
-                Fonte: <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">Aviation Weather Center / NOAA</a>. Exibindo registros vigentes (janela recente).
+                Fonte:{' '}
+                <a
+                  className="underline"
+                  href="https://aviationweather.gov/data/api/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Aviation Weather Center / NOAA
+                </a>
+                . Exibindo registros vigentes (janela recente).
               </p>
 
-              {/* barra de busca */}
+              {/* Barra de busca */}
               <div className="mt-4 flex flex-wrap gap-2 items-center">
                 <input
                   value={query}
@@ -135,7 +151,11 @@ export default function NotamPage() {
                   value={hours}
                   onChange={(e) => setHours(Number(e.target.value))}
                 >
-                  {[6, 12, 24, 36, 48, 72].map(h => <option key={h} value={h}>{h}h</option>)}
+                  {[6, 12, 24, 36, 48, 72].map((h) => (
+                    <option key={h} value={h}>
+                      {h}h
+                    </option>
+                  ))}
                 </select>
                 <button
                   onClick={load}
@@ -146,15 +166,17 @@ export default function NotamPage() {
                 </button>
               </div>
 
-              {/* dicas/erros resumidos */}
+              {/* Erros (se houver) */}
               {errors.length > 0 && (
                 <div className="mt-3 text-xs opacity-75 space-y-1">
-                  {errors.slice(0, 4).map((e, i) => (<div key={i}>• {e}</div>))}
+                  {errors.slice(0, 6).map((e, i) => (
+                    <div key={i}>• {e}</div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* vídeo decorativo */}
+            {/* Vídeo decorativo */}
             <div className="hidden md:block shrink-0">
               <div className="w-[340px] h-[140px] rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-lg">
                 <video
@@ -173,10 +195,10 @@ export default function NotamPage() {
           </div>
         </header>
 
-        {/* chips com populares para 1 clique */}
+        {/* Atalhos */}
         <div className="mb-4 text-sm">
           <span className="opacity-70 mr-2">Atalhos:</span>
-          {POPULARES.map(c => (
+          {POPULARES.map((c) => (
             <button
               key={c}
               onClick={() => addIcao(c)}
@@ -188,19 +210,32 @@ export default function NotamPage() {
           ))}
         </div>
 
-        {/* resultados */}
+        {/* Resultados */}
         {items.length === 0 ? (
-          <div className="opacity-80 text-sm">
-            Nenhum NOTAM ativo encontrado.
-          </div>
+          <div className="opacity-80 text-sm">Nenhum NOTAM ativo encontrado.</div>
         ) : (
           <div className="space-y-3">
             {items.map((n) => (
-              <article key={n.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <article
+                key={n.id}
+                className="rounded-xl border border-white/10 bg-black/20 p-3"
+              >
                 <div className="text-xs opacity-70 mb-1">
                   {n.icao ? <b>{n.icao}</b> : n.fir ? <b>{n.fir}</b> : null}
-                  {n.start && <> • início: {new Date(n.start).toLocaleString('pt-BR', { hour12: false })}</>}
-                  {n.end && <> • fim: {new Date(n.end).toLocaleString('pt-BR', { hour12: false })}</>}
+                  {n.start && (
+                    <>
+                      {' '}
+                      • início:{' '}
+                      {new Date(n.start).toLocaleString('pt-BR', { hour12: false })}
+                    </>
+                  )}
+                  {n.end && (
+                    <>
+                      {' '}
+                      • fim:{' '}
+                      {new Date(n.end).toLocaleString('pt-BR', { hour12: false })}
+                    </>
+                  )}
                 </div>
                 <pre className="whitespace-pre-wrap break-words text-sm">{n.text}</pre>
               </article>
@@ -208,7 +243,7 @@ export default function NotamPage() {
           </div>
         )}
 
-        {/* lista pesquisável de aeroportos (local) */}
+        {/* Lista pesquisável de ICAOs */}
         <details className="mt-6">
           <summary className="cursor-pointer text-sm opacity-80">
             Lista rápida de códigos (aeroportos do Brasil)
@@ -217,8 +252,16 @@ export default function NotamPage() {
         </details>
 
         <footer className="mt-8 text-xs opacity-70">
-          Dados via <a className="underline" href="https://aviationweather.gov/data/api/" target="_blank">AviationWeather.gov Data API</a>.
-          Fallback para ADDS (XML) ao consultar por “locations”.
+          Dados via{' '}
+          <a
+            className="underline"
+            href="https://aviationweather.gov/data/api/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            AviationWeather.gov Data API
+          </a>
+          . Fallback para ADDS (XML) ao consultar por “locations”.
         </footer>
       </section>
     </main>
@@ -228,11 +271,17 @@ export default function NotamPage() {
 /* ------------------------------------------------------------ */
 /* Sub-componente: lista pesquisável                            */
 /* ------------------------------------------------------------ */
-function AirportPicker({ allAirports, onPick }: { allAirports: string[]; onPick: (code: string) => void; }) {
+function AirportPicker({
+  allAirports,
+  onPick,
+}: {
+  allAirports: string[];
+  onPick: (code: string) => void;
+}) {
   const [filter, setFilter] = useState('');
   const list = useMemo(() => {
     const f = filter.trim().toUpperCase();
-    return allAirports.filter(c => c.includes(f)).slice(0, 400);
+    return allAirports.filter((c) => c.includes(f)).slice(0, 400);
   }, [allAirports, filter]);
 
   return (
@@ -240,14 +289,16 @@ function AirportPicker({ allAirports, onPick }: { allAirports: string[]; onPick:
       <div className="mb-2 flex items-center gap-2">
         <input
           value={filter}
-          onChange={e => setFilter(e.target.value)}
+          onChange={(e) => setFilter(e.target.value)}
           placeholder="filtrar… ex.: SB, RJ, POA"
           className="w-[260px] rounded-md bg-white/5 border border-white/10 px-3 py-2 outline-none text-sm"
         />
-        <div className="text-xs opacity-60">Clique em um código para adicionar no campo de busca</div>
+        <div className="text-xs opacity-60">
+          Clique em um código para adicionar no campo de busca
+        </div>
       </div>
       <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        {list.map(code => (
+        {list.map((code) => (
           <button
             key={code}
             onClick={() => onPick(code)}
@@ -257,7 +308,9 @@ function AirportPicker({ allAirports, onPick }: { allAirports: string[]; onPick:
             {code}
           </button>
         ))}
-        {list.length === 0 && <div className="opacity-60 text-sm">Nada encontrado…</div>}
+        {list.length === 0 && (
+          <div className="opacity-60 text-sm">Nada encontrado…</div>
+        )}
       </div>
     </div>
   );
