@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 import crypto from 'node:crypto';
 import { put, list } from '@vercel/blob';
+import { cfClassifyUAP, cfSummarizePtBR } from '@/lib/cfai';
 
 // ===== CONFIG =====
 const SOURCES = [
   { name: 'GoogleNews-PT', url: 'https://news.google.com/rss/search?q=OVNI+OR+OVNIS+OR+UAP+OR+%22objeto+n%C3%A3o+identificado%22+OR+%22luz+no+ceu%22+OR+%22drone+n%C3%A3o+identificado%22&hl=pt-BR&gl=BR&ceid=BR:pt-419' },
   { name: 'GoogleNews-EN', url: 'https://news.google.com/rss/search?q=UFO+OR+UAP+OR+%22unidentified+drone%22+OR+%22unidentified+object%22+OR+%22mystery+lights%22&hl=en-US&gl=US&ceid=US:en' },
-  // adicione feeds especializados com RSS quando quiser
 ];
 
 const KEYWORDS = [
@@ -38,8 +38,9 @@ function idFromUrl(url: string) {
   return crypto.createHash('sha1').update(url).digest('hex').slice(0,24);
 }
 
-function todaySlug(d = new Date()) {
-  return d.toISOString().slice(0,10); // YYYY-MM-DD
+function daySlug(d: Date | string) {
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return dt.toISOString().slice(0,10); // YYYY-MM-DD
 }
 
 const parser = new Parser({ timeout: 10000 });
@@ -49,6 +50,7 @@ export const revalidate = 0;
 
 export async function GET() {
   const created: string[] = [];
+  let usedIA = 0;
 
   for (const src of SOURCES) {
     try {
@@ -60,25 +62,48 @@ export async function GET() {
         const title = (item.title || '').trim();
         const snippet = (item.contentSnippet || item.content || item.summary || '').replace(/\s+/g,' ').trim();
 
+        // filtro rápido (gratuito)
         if (!looksUAP(title, snippet)) continue;
 
         const id = idFromUrl(url);
         const pub = item.isoDate || item.pubDate || new Date().toISOString();
-        const day = todaySlug(pub ? new Date(pub) : new Date());
+        const day = daySlug(pub);
         const path = `${ROOT}/items/${day}/${id}.json`;
+
+        // IA: classificar
+        let ok = true, why = 'rule-only', score = 1;
+        try {
+          const cls = await cfClassifyUAP(title, snippet);
+          ok = !!cls.ok; why = cls.why || why; score = typeof cls.score === 'number' ? cls.score : 0.7;
+          usedIA++;
+        } catch {
+          // se falhar IA, mantém ok=true (passa no filtro 1)
+        }
+        if (!ok) continue;
+
+        // IA: resumir PT-BR
+        let title_ai = title, summary_ai = snippet; let topics = ['ufo'];
+        try {
+          const sum = await cfSummarizePtBR(title, snippet);
+          title_ai = sum.titulo || title_ai;
+          summary_ai = sum.resumo || summary_ai;
+          topics = Array.isArray(sum.topicos) && sum.topicos.length ? sum.topicos : topics;
+          usedIA++;
+        } catch {
+          // fallback: mantém snippet
+        }
 
         const payload = {
           id, url,
           source: src.name,
           published_at: pub,
-          title,
-          summary: snippet,
-          // campos compatíveis com sua página/admin:
-          title_ai: title,
-          summary_ai: snippet,
+          title, summary: snippet,
+          title_ai, summary_ai,
+          topics,
+          relevance_note: why,
+          relevance_score: score,
           image_url: item.enclosure?.url || item.itunes?.image || null,
           author: item.creator || item.author || null,
-          topics: ['ufo','uap'],
           approved: true,
           created_at: new Date().toISOString()
         };
@@ -88,7 +113,6 @@ export async function GET() {
           contentType: 'application/json',
           addRandomSuffix: false,
         });
-
         created.push(path);
       }
     } catch (e) {
@@ -96,7 +120,7 @@ export async function GET() {
     }
   }
 
-  // Atualiza um índice curto com os mais recentes
+  // atualiza índice
   const all = await list({ prefix: `${ROOT}/items/`, limit: 300 });
   const latest = [...all.blobs]
     .sort((a,b) => +new Date(b.uploadedAt) - +new Date(a.uploadedAt))
@@ -109,5 +133,5 @@ export async function GET() {
     addRandomSuffix: false,
   });
 
-  return NextResponse.json({ ok: true, created: created.length, indexed: latest.length });
+  return NextResponse.json({ ok: true, created: created.length, ia_calls: usedIA, indexed: latest.length });
 }
