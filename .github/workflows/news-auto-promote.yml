@@ -2,55 +2,16 @@ name: News Auto-Promote (every 60 min)
 
 on:
   schedule:
-    - cron: "0 * * * *"   # a cada 60 min (UTC)
+    - cron: "*/60 * * * *"
   workflow_dispatch:
 
 jobs:
   auto-promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Promote top 3 items from robot index
+      - name: Wake promote endpoint
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
-          NEWS_ADMIN_TOKEN: ${{ secrets.NEWS_ADMIN_TOKEN }}
         run: |
-          if [ -z "$SITE_URL" ] || [ -z "$NEWS_ADMIN_TOKEN" ]; then
-            echo "Missing SITE_URL or NEWS_ADMIN_TOKEN"; exit 1
-          fi
-
-          # baixa index.json do robô
-          ROBOT_INDEX_URL="$SITE_URL/api/blob-proxy?path=news/uap/index.json"
-          # Se você não tem /api/blob-proxy, use a URL pública do Blob no lugar acima.
-
-          echo "Fetching robot index: $ROBOT_INDEX_URL"
-          INDEX_JSON=$(curl -sS -f "$ROBOT_INDEX_URL")
-          echo "$INDEX_JSON" | node -e '
-            const fs = require("fs");
-            const j = JSON.parse(fs.readFileSync(0,"utf8"));
-            const items = Array.isArray(j.items)?j.items:[]; 
-            const urls = items.slice(0,3).map(it=>it.url).filter(Boolean);
-            console.log(JSON.stringify(urls));
-          ' > urls.json
-
-          echo "URLs to promote:"
-          cat urls.json
-
-          # promove em série
-          node -e '
-            const fs = require("fs");
-            const fetch = (...args)=>import("node-fetch").then(({default:fetch})=>fetch(...args));
-            (async()=>{
-              const urls = JSON.parse(fs.readFileSync("urls.json","utf8"));
-              const site = process.env.SITE_URL;
-              const token = process.env.NEWS_ADMIN_TOKEN;
-              for (const u of urls) {
-                const r = await fetch(`${site}/api/news/promote`, {
-                  method: "POST",
-                  headers: { "Content-Type":"application/json", "Authorization":`Bearer ${token}` },
-                  body: JSON.stringify({ sourceUrl: u })
-                });
-                const j = await r.json().catch(()=>({}));
-                console.log("PROMOTE", u, r.status, JSON.stringify(j));
-              }
-            })().catch(e=>{ console.error(e); process.exit(1); });
-          '
+          echo "Waking promote endpoint..."
+          curl -fsS "${SITE_URL}/api/news/promote" || exit 1
