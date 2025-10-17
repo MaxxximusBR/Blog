@@ -116,8 +116,8 @@ export default function NotamPage() {
   className="pointer-events-none absolute inset-0 -z-10 bg-center bg-cover"
   style={{ backgroundImage: `url('/media/Sarajevo_airport_runway.jpg')` }}
 />
-{/* reduz de 95% para 80% */}
-<div className="pointer-events-none absolute inset-0 -z-10 bg-black/80" />
+{/* reduz de 95% para 85% */}
+<div className="pointer-events-none absolute inset-0 -z-10 bg-black/85" />
 {/* gradiente mais suave (clareia centro e bordas) */}
 <div
   className="pointer-events-none absolute inset-0 -z-10"
