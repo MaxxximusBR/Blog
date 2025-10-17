@@ -1,0 +1,8 @@
+{
+  "airports": [
+    "SBGR","SBSP","SBRJ","SBGL","SBBR","SBPA","SBKP","SBCT","SBFZ","SBRF","SBSV","SBCF","SBBH",
+    "SBFL","SBMO","SBEG","SBAR","SBCG","SBMG","SBSJ","SBSG","SBVT","SBSL","SBCZ","SBBE","SBBV",
+    "SBBH","SBSR","SBSM","SBPJ","SBCX","SBEK","SBMQ","SBTE","SBJU","SBUF","SBIL","SBUR","SBCF"
+    // …adicione todos que quiser
+  ]
+}
