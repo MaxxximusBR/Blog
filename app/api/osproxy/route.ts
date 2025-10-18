@@ -5,8 +5,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 type Trace = Array<Record<string, any>>;
-
-const UA = 'vercel-osproxy/1.2';
+const UA = 'vercel-osproxy/1.3';
 
 function ok(data: any, trace?: Trace) {
   return NextResponse.json({ ok: true, ...data, trace });
@@ -14,7 +13,7 @@ function ok(data: any, trace?: Trace) {
 function bad(error: string, trace?: Trace, status = 200) {
   return NextResponse.json({ ok: false, error, trace }, { status });
 }
-function n(v: string | null, d: number) {
+function num(v: string | null, d: number) {
   const x = Number(v);
   return Number.isFinite(x) ? x : d;
 }
@@ -28,11 +27,11 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+/* ---------------- token discovery + fetch ---------------- */
 async function discoverTokenUrl(trace: Trace): Promise<string | null> {
   const cands = [
-    // preferido (sem /auth no path)
     'https://auth.opensky-network.org/realms/opensky-network/.well-known/openid-configuration',
-    // legado
+    // fallback legado
     'https://auth.opensky-network.org/auth/realms/opensky-network/.well-known/openid-configuration',
   ];
   for (const url of cands) {
@@ -59,13 +58,9 @@ async function fetchToken(trace: Trace, retries = 2): Promise<string> {
   let tokenUrl = (process.env.OPEN_SKY_TOKEN_URL || '').trim();
 
   if (!cid || !sec) throw new Error('missing_client_env');
-
-  if (!tokenUrl) {
-    tokenUrl = (await discoverTokenUrl(trace)) || '';
-  }
+  if (!tokenUrl) tokenUrl = (await discoverTokenUrl(trace)) || '';
   if (!tokenUrl) throw new Error('token_url_not_found');
 
-  // tenta BASIC e depois POST; com retry leve
   const tryOnce = async (mode: 'basic' | 'post') => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -73,6 +68,7 @@ async function fetchToken(trace: Trace, retries = 2): Promise<string> {
       'User-Agent': UA,
     };
     let body: URLSearchParams;
+
     if (mode === 'basic') {
       headers.Authorization = 'Basic ' + Buffer.from(`${cid}:${sec}`).toString('base64');
       body = new URLSearchParams({ grant_type: 'client_credentials' });
@@ -118,13 +114,13 @@ async function fetchToken(trace: Trace, retries = 2): Promise<string> {
       return await tryOnce('post');
     } catch (e: any) {
       trace.push({ step: 'token_post_error', attempt: i, error: String(e?.message || e) });
-      // espera 600ms e re-tenta loop
       await new Promise(res => setTimeout(res, 600));
     }
   }
   throw new Error('token_failed');
 }
 
+/* ---------------- callers ---------------- */
 async function callStatesWithOAuth(qs: URLSearchParams, trace: Trace) {
   const token = await fetchToken(trace);
   const url = `https://opensky-network.org/api/states/all?${qs.toString()}`;
@@ -168,15 +164,19 @@ async function callStatesWithBasic(qs: URLSearchParams, trace: Trace) {
   return r.json();
 }
 
+/* ---------------- handler ---------------- */
 export async function GET(req: Request) {
   const trace: Trace = [];
+  // ⚠️ 'debug' precisa estar fora do try/catch
+  let debug = false;
+
   try {
     const url = new URL(req.url);
-    const lamin = n(url.searchParams.get('lamin'), -35);
-    const lomin = n(url.searchParams.get('lomin'), -68);
-    const lamax = n(url.searchParams.get('lamax'), -34);
-    const lomax = n(url.searchParams.get('lomax'), -58);
-    const debug = url.searchParams.get('debug') != null;
+    const lamin = num(url.searchParams.get('lamin'), -35);
+    const lomin = num(url.searchParams.get('lomin'), -68);
+    const lamax = num(url.searchParams.get('lamax'), -34);
+    const lomax = num(url.searchParams.get('lomax'), -58);
+    debug = url.searchParams.get('debug') != null;
     const backend = (url.searchParams.get('backend') || '').toLowerCase(); // 'oauth' | 'basic' | ''
 
     trace.push({ step: 'params', lamin, lomin, lamax, lomax, backend });
@@ -189,15 +189,11 @@ export async function GET(req: Request) {
     });
 
     let data: any;
-
     if (backend === 'basic') {
-      // força BASIC
       data = await callStatesWithBasic(qs, trace);
     } else if (backend === 'oauth') {
-      // força OAuth
       data = await callStatesWithOAuth(qs, trace);
     } else {
-      // tenta OAuth → fallback BASIC se tiver timeout/erro
       try {
         data = await callStatesWithOAuth(qs, trace);
       } catch (e: any) {
