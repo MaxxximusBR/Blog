@@ -33,8 +33,6 @@ export default function AdsbPanel({
         </a>
       </div>
 
-      <AdsbPanel demo7700={true} />
-      
       {/* Mosaico ilustrativo */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
