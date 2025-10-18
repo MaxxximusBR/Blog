@@ -1,19 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 type Flight = { hex: string; flight: string };
-type Trace = { step: string; error?: string; url?: string };
+type Trace = { step: string; url?: string; error?: string };
 
-function dedupe<T>(arr: T[], key: (v: T) => string) {
-  const m = new Map<string, T>();
-  for (const x of arr) m.set(key(x), x);
-  return Array.from(m.values());
-}
-
-// OpenSky / Airplanes.live -> schema "states": array de arrays
-function parseStatesArray(json: any): Flight[] {
-  const states: any[] = Array.isArray(json?.states) ? json.states : [];
+function parseStates(json: any): Flight[] {
+  const st: any[] = Array.isArray(json?.states) ? json.states : [];
   const out: Flight[] = [];
-  for (const s of states) {
+  for (const s of st) {
     if (!Array.isArray(s)) continue;
     const hex = String(s[0] || '').trim();
     const callsign = String(s[1] || '').trim();
@@ -36,55 +29,41 @@ async function fetchJSON(url: string, init?: RequestInit) {
     ...init,
   });
   if (!r.ok) {
-    const body = await r.text().catch(() => '');
+    const body = await r.text().catch(()=>'');
     const err = new Error(`http_${r.status}`);
     (err as any).status = r.status;
-    (err as any).body = body.slice(0, 300);
+    (err as any).body = body.slice(0,300);
     throw err;
   }
   return r.json();
 }
 
-async function fetchAirplanesLive(trace: Trace[], signal?: AbortSignal): Promise<Flight[]> {
-  const candidates = [
-    'https://api.airplanes.live/v2/states',
-    'https://api.airplanes.live/v2/states/all',
-    'https://api.airplanes.live/v2/states?lamin=-90&lomin=-180&lamax=90&lomax=180',
-  ];
+// Bounding box do Brasil (ajuste se quiser ampliar/reduzir)
+const BR_BBOX = { lamin: -35, lamax: 6, lomin: -74, lomax: -34 };
 
-  for (const url of candidates) {
-    try {
-      const j = await fetchJSON(url, { signal });
-      const flights = parseStatesArray(j);
-      if (flights.length) return flights;
-      // sem 7700 nesta fonte — registra e tenta próxima
-      trace.push({ step: 'airplanes_no_7700', url });
-    } catch (e: any) {
-      trace.push({ step: 'airplanes_error', url, error: String(e?.message || e) });
-      // tenta a próxima variação
-    }
-  }
-  // nenhuma variação retornou 7700
-  return [];
-}
-
-async function fetchOpenSky(trace: Trace[], signal?: AbortSignal): Promise<Flight[]> {
+async function fetchOpenSkyBBox(trace: Trace[]) {
   const u = process.env.OPEN_SKY_USER || '';
   const p = process.env.OPEN_SKY_PASS || '';
-  const url = 'https://opensky-network.org/api/states/all';
 
-  const headers: Record<string, string> = {};
+  const qs = new URLSearchParams({
+    lamin: String(BR_BBOX.lamin),
+    lamax: String(BR_BBOX.lamax),
+    lomin: String(BR_BBOX.lomin),
+    lomax: String(BR_BBOX.lomax),
+  });
+
+  const url = `https://opensky-network.org/api/states/all?${qs}`;
+  const headers: Record<string,string> = {};
   if (u && p) {
     headers['Authorization'] = 'Basic ' + Buffer.from(`${u}:${p}`).toString('base64');
   }
 
   try {
-    const j = await fetchJSON(url, { headers, signal });
-    const flights = parseStatesArray(j);
-    if (flights.length) return flights;
-    trace.push({ step: 'opensky_no_7700', url });
-    return [];
-  } catch (e: any) {
+    const j = await fetchJSON(url, { headers });
+    const flights = parseStates(j);
+    trace.push({ step: flights.length ? 'opensky_ok_7700' : 'opensky_ok_sem_7700', url });
+    return flights;
+  } catch (e:any) {
     trace.push({ step: 'opensky_error', url, error: String(e?.message || e) });
     return [];
   }
@@ -92,7 +71,7 @@ async function fetchOpenSky(trace: Trace[], signal?: AbortSignal): Promise<Fligh
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const demo = searchParams.get('demo') === '1';
+  const demo  = searchParams.get('demo') === '1';
   const debug = searchParams.get('debug') === '1';
 
   if (demo) {
@@ -106,32 +85,17 @@ export async function GET(req: Request) {
   }
 
   const trace: Trace[] = [];
-  const ctrl = new AbortController();
-  const { signal } = ctrl;
 
-  try {
-    // 1) Airplanes.live (3 variações)
-    const flightsAL = dedupe(await fetchAirplanesLive(trace, signal), f => f.hex);
-    if (flightsAL.length) {
-      return Response.json({ ok: true, count: flightsAL.length, flights: flightsAL, source: 'airplanes.live', ts: Date.now(), ...(debug ? { trace } : {}) });
-    }
+  // apenas OpenSky com BBOX (estável e leve)
+  const flights = await fetchOpenSkyBBox(trace);
 
-    // 2) OpenSky (fallback)
-    const flightsOS = dedupe(await fetchOpenSky(trace, signal), f => f.hex);
-    if (flightsOS.length) {
-      return Response.json({ ok: true, count: flightsOS.length, flights: flightsOS, source: 'opensky', ts: Date.now(), ...(debug ? { trace } : {}) });
-    }
-
-    return Response.json(
-      debug ? { ok: false, error: 'All sources failed', trace } : { ok: false, error: 'All sources failed' },
-      { status: 502 }
-    );
-  } catch (e: any) {
-    return Response.json(
-      debug ? { ok: false, error: String(e?.message || e), trace } : { ok: false, error: 'server_error' },
-      { status: 500 }
-    );
-  } finally {
-    ctrl.abort();
-  }
+  // Se falhar ou vier vazio, retornamos ok:true, count:0 (UI fica silenciosa)
+  return Response.json({
+    ok: true,
+    count: flights.length,
+    flights,
+    source: 'opensky',
+    ts: Date.now(),
+    ...(debug ? { trace } : {}),
+  });
 }
