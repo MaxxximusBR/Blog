@@ -65,4 +65,4 @@ function json(data: unknown, status = 200) {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   });
-}
+};
