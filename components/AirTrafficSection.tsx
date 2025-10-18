@@ -11,14 +11,36 @@ type Props = {
   atcTitle?: string;               // ex.: "Exemplo: KBOS Tower (oficial do seu stream)"
 };
 
-/* --------------------- hook: emergência 7700 --------------------- */
-function useEmergency7700() {
+/** Converte zoom aproximado em “raio” em graus (heurística simples) */
+function zoomToRadiusDeg(z: number) {
+  // quanto maior o zoom, menor o raio. z=6 → ~5°, z=8 → ~2°, z=10 → ~0.8°
+  return Math.max(0.3, 12 / Math.max(1, z));
+}
+
+/* --------------------- hook: emergência 7700 com BBOX --------------------- */
+function useEmergency7700(lat: number, lon: number, zoom: number) {
   const [count, setCount] = useState<number>(0);
   const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
 
+  // monta a query string com bbox derivado do centro+zoom
+  const qs = useMemo(() => {
+    const r = zoomToRadiusDeg(zoom);
+    const lamin = lat - r;
+    const lamax = lat + r;
+    const lomin = lon - r;
+    const lomax = lon + r;
+    const p = new URLSearchParams({
+      lamin: String(lamin),
+      lomin: String(lomin),
+      lamax: String(lamax),
+      lomax: String(lomax),
+    });
+    return p.toString();
+  }, [lat, lon, zoom]);
+
   async function tick(signal?: AbortSignal) {
     try {
-      const r = await fetch('/api/adsb/emergencies', { cache: 'no-store', signal });
+      const r = await fetch(`/api/adsb/emergencies?${qs}`, { cache: 'no-store', signal });
       const j = await r.json();
       if (j?.ok) {
         setCount(j.count || 0);
@@ -34,7 +56,7 @@ function useEmergency7700() {
     tick(ctrl.signal);
     const id = setInterval(() => tick(ctrl.signal), 60_000);
     return () => { ctrl.abort(); clearInterval(id); };
-  }, []);
+  }, [qs]);
 
   return { count, flights };
 }
@@ -48,13 +70,15 @@ export default function AdsbPanel({
   atcTitle = 'Live ATC (opcional)',
 }: Props) {
   const adsbfi = useMemo(
-    () => `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`,
+    () =>
+      `https://globe.adsb.fi/?hideSidebar=1&hideButtons=1&hideAircraftLabels=1&lat=${lat}&lon=${lon}&zoom=${zoom}`,
     [lat, lon, zoom]
   );
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  const { count, flights } = useEmergency7700();
+  // agora o hook usa o bbox do card
+  const { count, flights } = useEmergency7700(lat, lon, zoom);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
@@ -77,7 +101,9 @@ export default function AdsbPanel({
               </summary>
               <div className="mt-2 p-2 text-xs rounded-md bg-black/70 border border-white/10 shadow-lg">
                 {flights.map((f, i) => (
-                  <div key={i} className="opacity-90">• {f.flight || '(sem callsign)'} — {f.hex}</div>
+                  <div key={i} className="opacity-90">
+                    • {f.flight || '(sem callsign)'} — {f.hex}
+                  </div>
                 ))}
                 <div className="opacity-60 mt-1">Fonte: ADS-B JSON</div>
               </div>
@@ -115,7 +141,6 @@ export default function AdsbPanel({
             preload="metadata"
             aria-hidden="true"
           >
-            {/* você já enviou como /media/atradar.mp4 */}
             <source src="/media/atradar.mp4" type="video/mp4" />
           </video>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -124,7 +149,7 @@ export default function AdsbPanel({
           </span>
         </a>
 
-        {/* C O C K P I T  → vídeo no hover + link p/ METAR (como já estava) */}
+        {/* C O C K P I T  → vídeo no hover + link p/ METAR */}
         <a
           href="/metar"
           className="group relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -148,10 +173,12 @@ export default function AdsbPanel({
             <source src="/media/cockpit.mp4" type="video/mp4" />
           </video>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">METAR</span>
+          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">
+            METAR
+          </span>
         </a>
 
-        {/* T O W E R  → vídeo no hover + link p/ Frequências ATC (como já estava) */}
+        {/* T O W E R  → vídeo no hover + link p/ Frequências ATC */}
         <a
           href="/frequencias-atc"
           className="group col-span-2 relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -175,7 +202,9 @@ export default function AdsbPanel({
             <source src="/media/towelive.mp4" type="video/mp4" />
           </video>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">Frequências ATC</span>
+          <span className="pointer-events-none absolute bottom-2 right-2 text-[11px] px-2 py-0.5 rounded bg-black/50 border border-white/10">
+            Frequências ATC
+          </span>
         </a>
       </div>
 
@@ -205,7 +234,6 @@ export default function AdsbPanel({
               preload="metadata"
               aria-label="Animação de radar de tráfego aéreo"
             >
-              {/* você já usa atcradar.mp4 aqui — mantive */}
               <source src="/media/atcradar.mp4" type="video/mp4" />
             </video>
           </div>
