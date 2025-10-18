@@ -183,12 +183,12 @@ export default function AdsbPanel({
           </span>
         </a>
 
-        {/* T O W E R  → Frequências ATC */}
-        <a
-          href="/frequencias-atc"
-          className="group col-span-2 relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
-          aria-label="Abrir página Frequências ATC"
-        >
+       {/* T O W E R  → Frequências ATC */}
+<a
+  href="/atc-frequencias"   // <- aqui!
+  className="group col-span-2 relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+  aria-label="Abrir página Frequências ATC"
+>
           <img
             src="/media/tower.jpg"
             alt="Torre de controle"
