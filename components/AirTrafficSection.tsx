@@ -9,6 +9,8 @@ type Props = {
   // Live ATC (só use se for stream que você tem direito de retransmitir)
   atcStreamUrl?: string;           // ex.: process.env.NEXT_PUBLIC_ATC_STREAM_URL
   atcTitle?: string;               // ex.: "Exemplo: KBOS Tower (oficial do seu stream)"
+  // Para testar o badge 7700 sem depender de voo real:
+  demo7700?: boolean;
 };
 
 /** Converte zoom aproximado em “raio” em graus (heurística simples) */
@@ -17,37 +19,24 @@ function zoomToRadiusDeg(z: number) {
   return Math.max(0.3, 12 / Math.max(1, z));
 }
 
-/* --------------------- hook: emergência 7700 com BBOX --------------------- */
-function useEmergency7700(lat: number, lon: number, zoom: number) {
+/* --------------------- hook: emergência 7700 (com BBOX + demo) --------------------- */
+function useEmergency7700(
+  bbox: { lamin: number; lomin: number; lamax: number; lomax: number },
+  demo = false
+) {
   const [count, setCount] = useState<number>(0);
   const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
 
- const span = 3; // graus (~330km p/ lat)
-const bbox = useMemo(() => ({
-  lamin: lat - span,
-  lomin: lon - span,
-  lamax: lat + span,
-  lomax: lon + span,
-}), [lat, lon]);
-
-// coloque `true` temporariamente para ver o badge acender
-const { count, flights } = useEmergency7700(bbox, /* demo: */ true);
-  
-  // monta a query string com bbox derivado do centro+zoom
   const qs = useMemo(() => {
-    const r = zoomToRadiusDeg(zoom);
-    const lamin = lat - r;
-    const lamax = lat + r;
-    const lomin = lon - r;
-    const lomax = lon + r;
     const p = new URLSearchParams({
-      lamin: String(lamin),
-      lomin: String(lomin),
-      lamax: String(lamax),
-      lomax: String(lomax),
+      lamin: String(bbox.lamin),
+      lomin: String(bbox.lomin),
+      lamax: String(bbox.lamax),
+      lomax: String(bbox.lomax),
     });
+    if (demo) p.set('demo', '1');
     return p.toString();
-  }, [lat, lon, zoom]);
+  }, [bbox.lamin, bbox.lomin, bbox.lamax, bbox.lomax, demo]);
 
   async function tick(signal?: AbortSignal) {
     try {
@@ -56,9 +45,16 @@ const { count, flights } = useEmergency7700(bbox, /* demo: */ true);
       if (j?.ok) {
         setCount(j.count || 0);
         setFlights(Array.isArray(j.flights) ? j.flights : []);
+      } else if (demo) {
+        // fallback de demo se o upstream falhar
+        setCount(1);
+        setFlights([{ hex: 'demo7700', flight: 'DEMO7700' }]);
       }
     } catch {
-      // silencia — manter UI limpa
+      if (demo) {
+        setCount(1);
+        setFlights([{ hex: 'demo7700', flight: 'DEMO7700' }]);
+      }
     }
   }
 
@@ -67,6 +63,7 @@ const { count, flights } = useEmergency7700(bbox, /* demo: */ true);
     tick(ctrl.signal);
     const id = setInterval(() => tick(ctrl.signal), 60_000);
     return () => { ctrl.abort(); clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qs]);
 
   return { count, flights };
@@ -79,6 +76,7 @@ export default function AdsbPanel({
   zoom = 6,
   atcStreamUrl = process.env.NEXT_PUBLIC_ATC_STREAM_URL,
   atcTitle = 'Live ATC (opcional)',
+  demo7700 = false,
 }: Props) {
   const adsbfi = useMemo(
     () =>
@@ -88,8 +86,17 @@ export default function AdsbPanel({
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  // agora o hook usa o bbox do card
-  const { count, flights } = useEmergency7700(lat, lon, zoom);
+  // BBOX a partir do centro+zoom
+  const r = zoomToRadiusDeg(zoom);
+  const bbox = useMemo(() => ({
+    lamin: lat - r,
+    lomin: lon - r,
+    lamax: lat + r,
+    lomax: lon + r,
+  }), [lat, lon, r]);
+
+  // hook de alerta 7700
+  const { count, flights } = useEmergency7700(bbox, demo7700);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5">
@@ -116,7 +123,7 @@ export default function AdsbPanel({
                     • {f.flight || '(sem callsign)'} — {f.hex}
                   </div>
                 ))}
-                <div className="opacity-60 mt-1">Fonte: ADS-B JSON</div>
+                <div className="opacity-60 mt-1">Fonte: agregador ADS-B</div>
               </div>
             </details>
           )}
@@ -135,14 +142,12 @@ export default function AdsbPanel({
           className="group relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
           aria-label="Abrir página NOTAM"
         >
-          {/* imagem base */}
           <img
             src="/media/airtraffic.jpg"
             alt="Radar"
             className="w-full h-44 md:h-48 object-cover transition-opacity duration-300 group-hover:opacity-0"
             loading="lazy"
           />
-          {/* vídeo que aparece no hover */}
           <video
             className="pointer-events-none absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
             autoPlay
@@ -275,47 +280,6 @@ export default function AdsbPanel({
             </p>
           )}
         </div>
-
-        /* --------------------- hook: emergência 7700 --------------------- */
-function useEmergency7700(
-  bbox?: { lamin: number; lomin: number; lamax: number; lomax: number },
-  demo = false
-) {
-  const [count, setCount] = useState<number>(0);
-  const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
-
-  async function tick(signal?: AbortSignal) {
-    try {
-      const qs = new URLSearchParams();
-      if (bbox) {
-        qs.set('lamin', String(bbox.lamin));
-        qs.set('lomin', String(bbox.lomin));
-        qs.set('lamax', String(bbox.lamax));
-        qs.set('lomax', String(bbox.lomax));
-      }
-      if (demo) qs.set('demo', '1');
-
-      const r = await fetch(`/api/adsb/emergencies?${qs.toString()}`, { cache: 'no-store', signal });
-      const j = await r.json();
-      if (j?.ok) {
-        setCount(j.count || 0);
-        setFlights(Array.isArray(j.flights) ? j.flights : []);
-      }
-    } catch {
-      // silencia
-    }
-  }
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    tick(ctrl.signal);
-    const id = setInterval(() => tick(ctrl.signal), 60_000);
-    return () => { ctrl.abort(); clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(bbox), demo]);
-
-  return { count, flights };
-}
 
         {/* Atalhos externos */}
         <div className="rounded-xl border border-white/10 bg-black/30 p-3">
