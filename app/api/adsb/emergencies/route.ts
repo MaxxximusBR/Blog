@@ -33,6 +33,11 @@ export async function GET(req: Request) {
     const j = await r.json();
     const ac = Array.isArray(j?.aircraft) ? j.aircraft : [];
 
+   // depois de calcular `flights`...
+const demo = url.searchParams.get('demo') === '1';
+if (demo && flights.length === 0) {
+  flights.push({ hex: 'demo7700', flight: 'DEMO7700' });
+}    
     // aceita squawk em string/number e normaliza
     const emerg = ac.filter((a: any) => String(a?.squawk || '').trim() === '7700');
 
