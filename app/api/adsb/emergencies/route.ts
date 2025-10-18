@@ -1,54 +1,71 @@
 // app/api/adsb/emergencies/route.ts
-export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
 
-function num(v: string | null, def: number) {
-  const n = v == null ? NaN : Number(v);
-  return Number.isFinite(n) ? n : def;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+function num(x: any, d: number) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : d;
 }
 
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+
+  // BBOX (obrigatório para upstream)
+  const lamin = num(url.searchParams.get('lamin'), NaN);
+  const lomin = num(url.searchParams.get('lomin'), NaN);
+  const lamax = num(url.searchParams.get('lamax'), NaN);
+  const lomax = num(url.searchParams.get('lomax'), NaN);
+
+  // fallback: se não vier bbox, usa uma área moderada no Sudeste BR
+  const hasBox = [lamin, lomin, lamax, lomax].every(Number.isFinite);
+  const a = hasBox ? { lamin, lomin, lamax, lomax }
+                   : { lamin: -35, lomin: -74, lamax: 6, lomax: -34 }; // BR amplo
+
+  const demo = url.searchParams.get('demo') === '1';
+
   try {
-    const url = new URL(req.url);
-    const lamin = num(url.searchParams.get('lamin'), -35);
-    const lomin = num(url.searchParams.get('lomin'), -68);
-    const lamax = num(url.searchParams.get('lamax'), -34);
-    const lomax = num(url.searchParams.get('lomax'), -58);
+    const qs = new URLSearchParams({
+      lamin: String(a.lamin),
+      lomin: String(a.lomin),
+      lamax: String(a.lamax),
+      lomax: String(a.lomax),
+    }).toString();
 
-    // >>> MONTA URL ABSOLUTA PARA O UPSTREAM <<<
-    const upstream = new URL('/api/adsb/upstream', url.origin);
-    upstream.searchParams.set('lamin', String(lamin));
-    upstream.searchParams.set('lomin', String(lomin));
-    upstream.searchParams.set('lamax', String(lamax));
-    upstream.searchParams.set('lomax', String(lomax));
+    // Usa seu agregador (OpenSky público / OAuth / fallback tar1090 via proxy se configurado)
+    const r = await fetch(`${process.env.NEXT_PUBLIC_ADSB_UPSTREAM ?? ''}/api/adsb/upstream?${qs}`, {
+      cache: 'no-store',
+    }).catch(() => null);
 
-    const r = await fetch(upstream.toString(), { cache: 'no-store' });
-    if (!r.ok) {
-      const body = await r.text().catch(() => '');
-      return new Response(
-        JSON.stringify({ ok: false, error: 'upstream_http_' + r.status, body }),
-        { status: 502, headers: { 'content-type': 'application/json' } }
-      );
+    if (!r || !r.ok) {
+      return NextResponse.json({ ok: false, error: 'upstream_failed' }, { status: 502 });
     }
 
-    const j = await r.json();
+    const j = await r.json().catch(() => ({} as any));
     const ac = Array.isArray(j?.aircraft) ? j.aircraft : [];
 
-    // aceita squawk em string/number e normaliza
-    const emerg = ac.filter((a: any) => String(a?.squawk || '').trim() === '7700');
-
-    const flights = emerg.map((a: any) => ({
-      hex: String(a?.hex || '').toLowerCase(),
-      flight: (a?.flight || '').trim(),
-    }));
-
-    return new Response(
-      JSON.stringify({ ok: true, count: flights.length, flights }),
-      { headers: { 'content-type': 'application/json' } }
+    // filtra 7700 (string/number)
+    const emerg = ac.filter(
+      (a: any) => a?.squawk === '7700' || a?.squawk === 7700
     );
+
+    const flights =
+      emerg.map((a: any) => ({
+        hex: String(a?.hex || '').toLowerCase(),
+        flight: String(a?.flight || '').trim(),
+      })) ?? [];
+
+    // demo opcional
+    if (demo && flights.length === 0) {
+      flights.push({ hex: 'demo7700', flight: 'DEMO7700' });
+    }
+
+    return NextResponse.json({ ok: true, count: flights.length, flights });
   } catch (e: any) {
-    return new Response(
-      JSON.stringify({ ok: false, error: e?.message || 'internal_error' }),
-      { status: 500, headers: { 'content-type': 'application/json' } }
+    return NextResponse.json(
+      { ok: false, error: e?.message || 'internal' },
+      { status: 500 }
     );
   }
 }
