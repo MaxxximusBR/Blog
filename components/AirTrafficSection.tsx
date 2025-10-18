@@ -265,6 +265,47 @@ export default function AdsbPanel({
           )}
         </div>
 
+        /* --------------------- hook: emergência 7700 --------------------- */
+function useEmergency7700(
+  bbox?: { lamin: number; lomin: number; lamax: number; lomax: number },
+  demo = false
+) {
+  const [count, setCount] = useState<number>(0);
+  const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
+
+  async function tick(signal?: AbortSignal) {
+    try {
+      const qs = new URLSearchParams();
+      if (bbox) {
+        qs.set('lamin', String(bbox.lamin));
+        qs.set('lomin', String(bbox.lomin));
+        qs.set('lamax', String(bbox.lamax));
+        qs.set('lomax', String(bbox.lomax));
+      }
+      if (demo) qs.set('demo', '1');
+
+      const r = await fetch(`/api/adsb/emergencies?${qs.toString()}`, { cache: 'no-store', signal });
+      const j = await r.json();
+      if (j?.ok) {
+        setCount(j.count || 0);
+        setFlights(Array.isArray(j.flights) ? j.flights : []);
+      }
+    } catch {
+      // silencia
+    }
+  }
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    tick(ctrl.signal);
+    const id = setInterval(() => tick(ctrl.signal), 60_000);
+    return () => { ctrl.abort(); clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(bbox), demo]);
+
+  return { count, flights };
+}
+
         {/* Atalhos externos */}
         <div className="rounded-xl border border-white/10 bg-black/30 p-3">
           <h4 className="font-semibold mb-2">Atalhos externos</h4>
