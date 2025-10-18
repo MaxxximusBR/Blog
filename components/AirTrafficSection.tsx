@@ -9,7 +9,7 @@ type Props = {
   // Live ATC (só use se for stream que você tem direito de retransmitir)
   atcStreamUrl?: string;           // ex.: process.env.NEXT_PUBLIC_ATC_STREAM_URL
   atcTitle?: string;               // ex.: "Exemplo: KBOS Tower (oficial do seu stream)"
-  // Para testar o badge 7700 sem depender de voo real:
+  /** Liga o badge “Alerta 7700” em modo demonstração */
   demo7700?: boolean;
 };
 
@@ -19,42 +19,33 @@ function zoomToRadiusDeg(z: number) {
   return Math.max(0.3, 12 / Math.max(1, z));
 }
 
-/* --------------------- hook: emergência 7700 (com BBOX + demo) --------------------- */
+/* --------------------- hook: emergência 7700 com BBOX --------------------- */
 function useEmergency7700(
-  bbox: { lamin: number; lomin: number; lamax: number; lomax: number },
+  bbox?: { lamin: number; lomin: number; lamax: number; lomax: number },
   demo = false
 ) {
   const [count, setCount] = useState<number>(0);
   const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
 
-  const qs = useMemo(() => {
-    const p = new URLSearchParams({
-      lamin: String(bbox.lamin),
-      lomin: String(bbox.lomin),
-      lamax: String(bbox.lamax),
-      lomax: String(bbox.lomax),
-    });
-    if (demo) p.set('demo', '1');
-    return p.toString();
-  }, [bbox.lamin, bbox.lomin, bbox.lamax, bbox.lomax, demo]);
-
   async function tick(signal?: AbortSignal) {
     try {
-      const r = await fetch(`/api/adsb/emergencies?${qs}`, { cache: 'no-store', signal });
+      const qs = new URLSearchParams();
+      if (bbox) {
+        qs.set('lamin', String(bbox.lamin));
+        qs.set('lomin', String(bbox.lomin));
+        qs.set('lamax', String(bbox.lamax));
+        qs.set('lomax', String(bbox.lomax));
+      }
+      if (demo) qs.set('demo', '1');
+
+      const r = await fetch(`/api/adsb/emergencies?${qs.toString()}`, { cache: 'no-store', signal });
       const j = await r.json();
       if (j?.ok) {
         setCount(j.count || 0);
         setFlights(Array.isArray(j.flights) ? j.flights : []);
-      } else if (demo) {
-        // fallback de demo se o upstream falhar
-        setCount(1);
-        setFlights([{ hex: 'demo7700', flight: 'DEMO7700' }]);
       }
     } catch {
-      if (demo) {
-        setCount(1);
-        setFlights([{ hex: 'demo7700', flight: 'DEMO7700' }]);
-      }
+      // silencioso
     }
   }
 
@@ -64,7 +55,7 @@ function useEmergency7700(
     const id = setInterval(() => tick(ctrl.signal), 60_000);
     return () => { ctrl.abort(); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qs]);
+  }, [JSON.stringify(bbox), demo]);
 
   return { count, flights };
 }
@@ -86,16 +77,14 @@ export default function AdsbPanel({
   const radarboxBrSul = `https://www.radarbox.com/@-30.2,-51.2,7z`;
   const fr24Poa = `https://www.flightradar24.com/-30.03,-51.22/8`;
 
-  // BBOX a partir do centro+zoom
+  // BBOX baseado no centro+zoom do card
   const r = zoomToRadiusDeg(zoom);
-  const bbox = useMemo(() => ({
-    lamin: lat - r,
-    lomin: lon - r,
-    lamax: lat + r,
-    lomax: lon + r,
-  }), [lat, lon, r]);
+  const bbox = useMemo(
+    () => ({ lamin: lat - r, lomin: lon - r, lamax: lat + r, lomax: lon + r }),
+    [lat, lon, r]
+  );
 
-  // hook de alerta 7700
+  // Hook de emergência (usa demo7700 quando true)
   const { count, flights } = useEmergency7700(bbox, demo7700);
 
   return (
@@ -123,7 +112,7 @@ export default function AdsbPanel({
                     • {f.flight || '(sem callsign)'} — {f.hex}
                   </div>
                 ))}
-                <div className="opacity-60 mt-1">Fonte: agregador ADS-B</div>
+                <div className="opacity-60 mt-1">Fonte: ADS-B JSON</div>
               </div>
             </details>
           )}
@@ -134,9 +123,9 @@ export default function AdsbPanel({
         </div>
       </div>
 
-      {/* Painel ilustrativo com imagens (com vídeo no hover para radar/cockpit/tower) */}
+      {/* Painel ilustrativo com imagens (vídeo on-hover) */}
       <div className="grid grid-cols-2 gap-3 mb-4">
-        {/* R A D A R  → vídeo no hover + link p/ NOTAM */}
+        {/* R A D A R  → NOTAM */}
         <a
           href="/notam"
           className="group relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -165,7 +154,7 @@ export default function AdsbPanel({
           </span>
         </a>
 
-        {/* C O C K P I T  → vídeo no hover + link p/ METAR */}
+        {/* C O C K P I T  → METAR */}
         <a
           href="/metar"
           className="group relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -194,7 +183,7 @@ export default function AdsbPanel({
           </span>
         </a>
 
-        {/* T O W E R  → vídeo no hover + link p/ Frequências ATC */}
+        {/* T O W E R  → Frequências ATC */}
         <a
           href="/frequencias-atc"
           className="group col-span-2 relative block rounded-xl overflow-hidden border border-white/10 bg-black/30 focus:outline-none focus:ring-2 focus:ring-white/20"
@@ -224,21 +213,20 @@ export default function AdsbPanel({
         </a>
       </div>
 
-      {/* Ações rápidas (externo) */}
+      {/* Ações rápidas */}
       <div className="flex flex-wrap gap-2 mb-3">
         <a href={adsbfi} target="_blank" rel="noopener noreferrer" className="btn">ADSB.fi (mapa)</a>
         <a href={radarboxBrSul} target="_blank" rel="noopener noreferrer" className="btn">Radarbox — BR Sul</a>
         <a href={fr24Poa} target="_blank" rel="noopener noreferrer" className="btn">FlightRadar24 — POA</a>
       </div>
 
-      {/* Aviso de dados */}
+      {/* Avisos */}
       <div className="grid md:grid-cols-2 gap-3">
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
           <span className="font-medium">Dica:</span> use o botão <span className="font-semibold">Abrir mapa</span> para ver
           camadas, filtros e rótulos completos. O painel acima é ilustrativo — o mapa real carrega na nova guia.
         </div>
 
-        {/* Card de aviso com banner animado acima do texto */}
         <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
           <div className="rounded-lg overflow-hidden border border-white/10 mb-2 bg-black/40">
             <video
@@ -253,14 +241,13 @@ export default function AdsbPanel({
               <source src="/media/atcradar.mp4" type="video/mp4" />
             </video>
           </div>
-
           <p className="opacity-80">
             Dados de posição presumem recepção ADS-B comunitária; podem existir atrasos, lacunas e aeronaves não exibidas.
           </p>
         </div>
       </div>
 
-      {/* Live ATC — só renderiza player se houver stream autorizado */}
+      {/* Live ATC */}
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-black/30 p-3">
           <h4 className="font-semibold mb-2">Live ATC</h4>
@@ -281,7 +268,6 @@ export default function AdsbPanel({
           )}
         </div>
 
-        {/* Atalhos externos */}
         <div className="rounded-xl border border-white/10 bg-black/30 p-3">
           <h4 className="font-semibold mb-2">Atalhos externos</h4>
           <div className="flex flex-wrap gap-2">
