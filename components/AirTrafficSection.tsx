@@ -22,6 +22,17 @@ function useEmergency7700(lat: number, lon: number, zoom: number) {
   const [count, setCount] = useState<number>(0);
   const [flights, setFlights] = useState<{ hex: string; flight: string }[]>([]);
 
+ const span = 3; // graus (~330km p/ lat)
+const bbox = useMemo(() => ({
+  lamin: lat - span,
+  lomin: lon - span,
+  lamax: lat + span,
+  lomax: lon + span,
+}), [lat, lon]);
+
+// coloque `true` temporariamente para ver o badge acender
+const { count, flights } = useEmergency7700(bbox, /* demo: */ true);
+  
   // monta a query string com bbox derivado do centro+zoom
   const qs = useMemo(() => {
     const r = zoomToRadiusDeg(zoom);
